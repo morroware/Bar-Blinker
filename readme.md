@@ -1,208 +1,256 @@
-# WLED Button Control
+# WLED Button Controller
 
-A Python script for controlling WLED devices using a Raspberry Pi push-button. This script enables simple physical control of your WLED installation through button presses, with different behaviors for short and long presses.
+## Overview
+The **WLED Button Controller** is a Python-based application running on a Raspberry Pi that manages WLED-powered LED strips through a single physical button. It distinguishes between different types of button presses to execute corresponding LED behaviors:
+
+* **Short Press:**
+   * **Action:** A quick press of the button.
+   * **Behavior:** The LED strips blink green for a configurable duration (e.g., 30 seconds), providing a brief visual notification or alert.
+
+* **Long Press:**
+   * **Action:** Holding down the button for longer than a specified threshold (e.g., 6 seconds).
+   * **Behavior:** The LED strips initiate a continuous red blinking sequence while the button remains pressed, indicating a sustained alert or action.
+
+* **Press Release After Long Press:**
+   * **Action:** Releasing the button after a long press.
+   * **Behavior:** The LED strips revert to a steady white color, signaling the end of the long-press action.
+
+These distinct button interactions allow users to intuitively control LED colors and patterns, enabling both quick notifications and sustained alerts based on their input.
 
 ## Features
-
-- **Short Press**: Triggers a 30-second green blink pattern
-- **Long Press**: Activates red blinking while the button is held down
-- **Auto-Recovery**: Automatically reconnects to WLED if connection is lost
-- **Robust Error Handling**: Comprehensive logging and error recovery
-- **Configurable Settings**: Easy customization through a central configuration class
-- **Thread-Safe Operations**: Ensures reliable operation with concurrent state changes
+* Single-button interface for multiple LED patterns
+* Web-based configuration interface
+* Configurable timing parameters
+* Automatic reconnection handling
+* Comprehensive logging system
+* Thread-safe operations
+* Configuration persistence using INI files
 
 ## Hardware Requirements
+* Raspberry Pi (any model with GPIO pins)
+* Momentary push button
+* 10kΩ resistor (optional - internal pull-up resistor can be used)
+* WLED-compatible LED controller (e.g., ESP8266/ESP32 running WLED)
+* LED strip compatible with your WLED controller
 
-- Raspberry Pi (any model)
-- Push button (momentary switch)
-- WLED-compatible LED strip/device
-- Basic wiring components (wires, resistors if needed)
+## Software Requirements
+* Raspberry Pi OS (formerly Raspbian)
+* Python 3.6 or higher
+* pip (Python package manager)
+* Required Python packages:
+  * Flask
+  * requests
+  * RPi.GPIO
 
 ## Hardware Setup
 
-1. **Button Connection**:
-   - Connect one terminal of your push button to GPIO 18 (BCM numbering)
-   - Connect the other terminal to GND (ground)
-   - The script uses internal pull-up resistors, so no external resistor is needed
+### Button Wiring
+1. Connect one terminal of the button to GPIO 18 (default, configurable)
+2. Connect the other terminal to GND (Ground)
+   - Note: The code uses the internal pull-up resistor, but you can add an external 10kΩ pull-up resistor for additional reliability
 
-2. **WLED Device**:
-   - Ensure your WLED device is properly set up and connected to your network
-   - Note down its IP address (you'll need this for configuration)
-
-## Software Prerequisites
-
-1. **Operating System**:
-   ```bash
-   # Update your Raspberry Pi OS
-   sudo apt update
-   sudo apt upgrade
-   ```
-
-2. **Python Requirements**:
-   ```bash
-   # Install required Python packages
-   sudo apt install python3-pip
-   pip3 install RPi.GPIO requests
-   ```
-
-## Installation
-
-1. **Clone or Download**:
-   ```bash
-   # Clone this repository (if using git)
-   git clone [repository-url]
-   cd wled-button
-   ```
-
-2. **Configuration**:
-   - Open `wled_button.py` in your preferred editor
-   - Modify the `Config` class settings:
-     ```python
-     class Config:
-         BUTTON_PIN = 18  # Change if using different GPIO pin
-         WLED_IP = "192.168.6.12"  # Change to your WLED device's IP
-         
-         # Adjust timing settings if desired
-         LONG_PRESS_THRESHOLD = 6.0
-         SHORT_FLASH_DURATION = 30.0
-         FLASH_INTERVAL = 0.5
-         FLASH_BRIGHTNESS = 255
-     ```
-
-3. **Make Executable**:
-   ```bash
-   chmod +x wled_button.py
-   ```
-
-## Running the Script
-
-### Manual Execution
-```bash
-./wled_button.py
+### Basic Circuit Diagram
+```
+Raspberry Pi     Button
+GPIO 18  -------|/------
+                        |
+GND      --------------)
 ```
 
-### Run as a Service
+## Software Installation
 
-1. Create a systemd service file:
-   ```bash
-   sudo nano /etc/systemd/system/wled-button.service
-   ```
+1. Update your Raspberry Pi:
+```bash
+sudo apt update
+sudo apt upgrade
+```
+
+2. Install required Python packages:
+```bash
+sudo apt install python3-pip
+pip3 install flask requests RPi.GPIO
+```
+
+3. Create project directory and structure:
+```bash
+mkdir ~/wled-button
+cd ~/wled-button
+mkdir templates
+```
+
+4. Create the following files:
+- `bar-blinker.py` (main script)
+- `blinker-configs.ini` (configuration file)
+- `templates/index.html` (web interface template)
+
+5. Make the main script executable:
+```bash
+chmod +x bar-blinker.py
+```
+
+## Configuration
+
+### Initial Setup
+Create `blinker-configs.ini` with the following content:
+```ini
+[BLINKER]
+BUTTON_PIN = 18
+WLED_IP = "192.168.6.12"
+LONG_PRESS_THRESHOLD = 6.0
+SHORT_FLASH_DURATION = 30.0
+FLASH_INTERVAL = 0.5
+FLASH_BRIGHTNESS = 255
+LOG_FILE = ~/wled_button.log
+MAX_RETRIES = 3
+RETRY_DELAY = 1
+RECONNECT_DELAY = 5
+TRANSITION_TIME = 0.0
+REQUEST_TIMEOUT = 5
+```
+
+### Key Configuration Parameters
+* **BUTTON_PIN**: GPIO pin number where button is connected (default: 18)
+* **WLED_IP**: IP address of your WLED device
+* **LONG_PRESS_THRESHOLD**: Time in seconds to trigger long press (default: 6.0)
+* **SHORT_FLASH_DURATION**: Duration of green blinking sequence in seconds (default: 30.0)
+* **FLASH_INTERVAL**: Time between blinks in seconds (default: 0.5)
+* **FLASH_BRIGHTNESS**: LED brightness level (0-255, default: 255)
+
+## Running as a Service
+
+1. Create systemd service file:
+```bash
+sudo nano /etc/systemd/system/wled-button.service
+```
 
 2. Add the following content:
-   ```ini
-   [Unit]
-   Description=WLED Button Control
-   After=network.target
+```ini
+[Unit]
+Description=WLED Button Controller
+After=network.target
 
-   [Service]
-   ExecStart=/usr/bin/python3 /full/path/to/wled_button.py
-   WorkingDirectory=/full/path/to/script/directory
-   StandardOutput=inherit
-   StandardError=inherit
-   Restart=always
-   User=pi
+[Service]
+ExecStart=/home/pi/wled-button/bar-blinker.py
+WorkingDirectory=/home/pi/wled-button
+User=pi
+Group=pi
+Restart=always
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-3. Enable and start the service:
-   ```bash
-   sudo systemctl enable wled-button
-   sudo systemctl start wled-button
-   ```
-
-4. Check service status:
-   ```bash
-   sudo systemctl status wled-button
-   ```
-
-## Configuration Options
-
-The `Config` class provides several customizable parameters:
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `BUTTON_PIN` | GPIO pin number (BCM) | 18 |
-| `WLED_IP` | IP address of WLED device | "192.168.6.12" |
-| `LONG_PRESS_THRESHOLD` | Seconds to trigger long press | 6.0 |
-| `SHORT_FLASH_DURATION` | Duration of green flash (seconds) | 30.0 |
-| `FLASH_INTERVAL` | Blink interval (seconds) | 0.5 |
-| `FLASH_BRIGHTNESS` | LED brightness during flashing | 255 |
-| `LOG_FILE` | Path to log file | "~/wled_button.log" |
-| `MAX_RETRIES` | Maximum retry attempts | 3 |
-| `RETRY_DELAY` | Base delay between retries (seconds) | 1 |
-| `RECONNECT_DELAY` | Base delay for reconnection (seconds) | 5 |
-| `TRANSITION_TIME` | Color transition time (seconds) | 0.0 |
-| `REQUEST_TIMEOUT` | HTTP request timeout (seconds) | 5 |
-
-## Color Configuration
-
-The script uses specific RGB values for different states:
-
-- **White** (Default): `(255, 255, 255)`
-- **Green** (Short Press): `(0, 0, 255)` - Note: May need adjustment based on your LED strip's color order
-- **Red** (Long Press): `(0, 255, 0)` - Note: May need adjustment based on your LED strip's color order
-
-Adjust these values in the code according to your LED strip's color order (RGB/GRB/etc).
-
-## Logging
-
-The script maintains detailed logs for troubleshooting:
-
-- Log file location: `~/wled_button.log`
-- Implements log rotation (1MB file size, keeps 5 backups)
-- Logs both to file and console
-- Different log levels (INFO, WARNING, ERROR) for easy filtering
-
-View logs using:
-```bash
-tail -f ~/wled_button.log
+[Install]
+WantedBy=multi-user.target
 ```
 
-## Error Handling and Recovery
+3. Enable and start the service:
+```bash
+sudo systemctl enable wled-button
+sudo systemctl start wled-button
+```
 
-The script includes robust error handling:
+## Web Interface
+* Access at: `http://<raspberry-pi-ip>:5000`
+* Features:
+  * Configuration parameter adjustment
+  * Button press simulation
+  * System status monitoring
+  * Visual feedback for actions
 
-- **Connection Loss**: Automatically attempts to reconnect with exponential backoff
-- **Request Failures**: Implements retry logic with configurable attempts
-- **State Recovery**: Maintains last known state for recovery after errors
-- **Configuration Validation**: Validates all settings at startup
+## Behavior Details
+
+### Short Press Sequence
+1. Button is pressed and released before LONG_PRESS_THRESHOLD
+2. LED strip begins green blinking sequence
+3. Alternates between:
+   - Green (RGB: 0, 255, 0) at configured brightness
+   - Off state
+4. Continues for SHORT_FLASH_DURATION seconds
+5. Returns to solid white
+6. Additional short presses during green sequence are ignored
+
+### Long Press Sequence
+1. Button is held for longer than LONG_PRESS_THRESHOLD
+2. LED strip begins red blinking sequence
+3. Alternates between:
+   - Red (RGB: 255, 0, 0) at configured brightness
+   - Off state
+4. Continues while button is held
+5. Returns to solid white on release
+
+### Error Handling
+* Automatic reconnection to WLED device if connection is lost
+* Exponential backoff for retry attempts
+* Comprehensive logging of errors and events
+* Graceful degradation if components fail
 
 ## Troubleshooting
 
-1. **Button Not Responding**:
-   - Check GPIO connection
-   - Verify `BUTTON_PIN` setting matches your wiring
-   - Check button for physical issues
-   - Ensure script has GPIO permissions
+### Common Issues
+1. **LED Strip Not Responding**
+   - Verify WLED_IP is correct
+   - Check WLED device is powered and connected
+   - Review logs for connection errors
 
-2. **WLED Connection Issues**:
-   - Verify WLED device IP address
+2. **Button Not Working**
+   - Verify GPIO pin configuration
+   - Check button wiring
+   - Test button with multimeter
+
+3. **Web Interface Inaccessible**
    - Check network connectivity
-   - Ensure WLED device is powered and operational
-   - Check firewall settings
+   - Verify service is running
+   - Check for port conflicts
 
-3. **Wrong Colors**:
-   - Adjust RGB values in `set_color()` calls
-   - Common LED strip color orders: RGB, GRB, BGR
-   - Test with different color combinations
+### Logging
+* Default log location: `~/wled_button.log`
+* Log rotation: 1MB file size, 5 backup files
+* Contains:
+  - Connection status
+  - Button events
+  - Error messages
+  - Configuration changes
 
-4. **Service Won't Start**:
-   - Check logs: `journalctl -u wled-button`
-   - Verify Python dependencies
-   - Check file permissions
-   - Validate service file path settings
+## Security Considerations
+* Web interface runs on all network interfaces
+* No authentication implemented by default
+* Consider running behind reverse proxy
+* Restrict network access in production environments
 
-## Contributing
+## Maintenance
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### Service Management
+```bash
+# Check status
+sudo systemctl status wled-button
 
-## License
+# Stop service
+sudo systemctl stop wled-button
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+# Start service
+sudo systemctl start wled-button
 
-## Acknowledgments
+# Restart service
+sudo systemctl restart wled-button
 
-- WLED Project: https://github.com/Aircoookie/WLED
-- RPi.GPIO documentation: https://pypi.org/project/RPi.GPIO/
+# View logs
+journalctl -u wled-button
+```
+
+### Updates
+1. Stop the service
+2. Update code files
+3. Test configuration
+4. Restart service
+
+## Support and Development
+
+### Monitoring
+* Check service status regularly
+* Monitor log files for errors
+* Verify network connectivity
+* Test button functionality
+
+### Future Development
+* Authentication for web interface
+* MQTT integration
+* Additional button patterns
+* Enhanced error reporting
+* Configuration backup/restore
