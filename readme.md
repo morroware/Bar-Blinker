@@ -208,11 +208,6 @@ sudo systemctl start wled-button
   - Error messages
   - Configuration changes
 
-## Security Considerations
-* Web interface runs on all network interfaces
-* No authentication implemented by default
-* Consider running behind reverse proxy
-* Restrict network access in production environments
 
 ## Maintenance
 
@@ -248,9 +243,3 @@ journalctl -u wled-button
 * Verify network connectivity
 * Test button functionality
 
-### Future Development
-* Authentication for web interface
-* MQTT integration
-* Additional button patterns
-* Enhanced error reporting
-* Configuration backup/restore
