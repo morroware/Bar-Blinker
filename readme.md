@@ -8,14 +8,28 @@ A Raspberry Pi-based controller for WLED LED strips with GPIO input triggering a
 
 ## Technical Specifications
 
+### Threading Architecture
+- Multi-threaded design with three primary threads:
+  1. Main Thread (Flask Web Server)
+     - Handles web interface requests
+     - Configuration management
+     - HTTP endpoints for simulation
+     - Template rendering
+  
+  2. Hardware Monitoring Thread
+     - Continuous GPIO state monitoring
+     - Debounce implementation
+     - Contact closure duration tracking
+     - State transition management
+  
+  3. Connection Management Thread
+     - Background WLED connectivity
+     - Automatic reconnection logic
+     - Exponential backoff implementation
+     - Connection state monitoring
+
 ### Input Processing
 - Contact closure detection via GPIO
-- Compatible with various input devices:
-  - Mechanical switches
-  - Relays
-  - Solid-state relays
-  - Open collector outputs
-  - Any contact closure mechanism
 - Configurable pull-up/pull-down resistance
 - Software-based debounce implementation
 
@@ -42,6 +56,26 @@ A Raspberry Pi-based controller for WLED LED strips with GPIO input triggering a
 - Input simulation capability
 - System status monitoring
 - Configuration management
+
+### State Machine Logic
+- Contact Closure States:
+  - Idle: No input detected
+  - Short Press: < 6 seconds (configurable)
+  - Long Press: ≥ 6 seconds (configurable)
+  - Debounce: Input stabilization period
+
+- LED States:
+  - Default: Constant white (RGB: 255,255,255)
+  - Notification: Green blinking (RGB: 0,255,0)
+  - Alert: Red blinking (RGB: 255,0,0)
+  - Off: Transitional state (RGB: 0,0,0)
+
+### HTTP API Endpoints
+- Root (/): Configuration interface
+- /update_config (POST): Parameter updates
+- /simulate_press (POST): Input simulation
+  - Parameters:
+    - press_type: "short" or "long"
 
 ### System Architecture
 - Multi-threaded operation:
@@ -118,6 +152,38 @@ Configuration parameters:
 
 ## Configuration Parameters
 
+### Logging System
+- File Location: ~/wled_button.log (configurable)
+- Rotation Policy:
+  - Maximum Size: 1MB per file
+  - Backup Count: 5 files
+  - Format: Timestamp - Level - Message
+- Console Output: Simultaneous logging
+- Level: INFO (default)
+
+### Connection Management
+- Automatic Reconnection:
+  - Exponential backoff algorithm
+  - Maximum delay: 60 seconds
+  - Jitter: ±10% of delay
+  - Continuous retry mechanism
+
+### WLED Communication
+- Protocol: HTTP/JSON
+- Endpoints:
+  - /json/info: Device information
+  - /json/state: State control
+- State Parameters:
+  - on: Boolean power state
+  - bri: Brightness (0-255)
+  - transition: Effect duration (ms)
+  - seg: Array of segment configurations
+    - id: Segment identifier
+    - col: RGB color array
+    - fx: Effect index
+    - sx: Effect speed
+    - ix: Effect intensity
+
 ### Primary Configuration (blinker-configs.ini)
 ```ini
 [BLINKER]
@@ -158,9 +224,10 @@ journalctl -u bar-blinker -f        # Log monitoring
    - Verify network configuration
    - Review HTTP server logs
 
-## License
-MIT License - See LICENSE file for details.
-
+## External Dependencies
+- WLED Firmware
+- Flask Framework
+- Raspberry Pi GPIO Library
 ## External Dependencies
 - WLED Firmware
 - Flask Framework
