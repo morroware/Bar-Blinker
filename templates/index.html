@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WLED Button Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.5/cdn.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+        
+        body {
+            background-color: #111827;
+            color: #e5e7eb;
+        }
+
+        input {
+            background-color: #1f2937;
+            border: 1px solid #374151;
+            color: #e5e7eb;
+            transition: all 0.2s;
+        }
+
+        input:focus {
+            border-color: #3b82f6;
+            outline: none;
+            ring: 2px solid #3b82f6;
+        }
+
+        input:read-only {
+            background-color: #374151;
+            cursor: not-allowed;
+        }
+
+        .btn {
+            @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
+        }
+
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-700 text-white;
+        }
+
+        .btn-secondary {
+            @apply bg-gray-600 hover:bg-gray-700 text-white;
+        }
+
+        .card {
+            background-color: #1f2937;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .input-group {
+            margin-bottom: 1rem;
+        }
+
+        .input-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #9ca3af;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="card mb-8">
+            <h1 class="text-2xl font-bold mb-4">WLED Button Control</h1>
+            <p class="text-gray-400">
+                Below, you can change timing/brightness config values. These changes will apply 
+                <span class="font-semibold text-blue-400">immediately</span> to blinking loops, without restarting the script.
+            </p>
+        </div>
+
+        <!-- Config Update Form -->
+        <div class="card mb-8">
+            <h2 class="text-xl font-semibold mb-6">Configuration Settings</h2>
+            <form method="POST" action="{{ url_for('update_config') }}" class="space-y-6">
+                <!-- Button Pin (Read-only) -->
+                <div class="input-group">
+                    <label class="input-label">BUTTON_PIN:</label>
+                    <input 
+                        type="number" 
+                        name="BUTTON_PIN" 
+                        value="{{ c.BUTTON_PIN }}" 
+                        readonly 
+                        class="w-full px-3 py-2 rounded-md"
+                    />
+                    <p class="mt-1 text-sm text-yellow-500">(Restart required if changed)</p>
+                </div>
+
+                <!-- WLED IP -->
+                <div class="input-group">
+                    <label class="input-label">WLED_IP:</label>
+                    <input 
+                        type="text" 
+                        name="WLED_IP" 
+                        value="{{ c.WLED_IP }}" 
+                        class="w-full px-3 py-2 rounded-md"
+                    />
+                </div>
+
+                <!-- Timing Settings -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="input-group">
+                        <label class="input-label">LONG_PRESS_THRESHOLD:</label>
+                        <input 
+                            type="number" 
+                            name="LONG_PRESS_THRESHOLD" 
+                            value="{{ c.LONG_PRESS_THRESHOLD }}" 
+                            step="0.1"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">SHORT_FLASH_DURATION:</label>
+                        <input 
+                            type="number" 
+                            name="SHORT_FLASH_DURATION" 
+                            value="{{ c.SHORT_FLASH_DURATION }}" 
+                            step="0.1"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">FLASH_INTERVAL:</label>
+                        <input 
+                            type="number" 
+                            name="FLASH_INTERVAL" 
+                            value="{{ c.FLASH_INTERVAL }}" 
+                            step="0.1"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">FLASH_BRIGHTNESS:</label>
+                        <input 
+                            type="number" 
+                            name="FLASH_BRIGHTNESS" 
+                            value="{{ c.FLASH_BRIGHTNESS }}" 
+                            min="0" 
+                            max="255"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+                </div>
+
+                <!-- System Settings -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="input-group">
+                        <label class="input-label">LOG_FILE:</label>
+                        <input 
+                            type="text" 
+                            name="LOG_FILE" 
+                            value="{{ c.LOG_FILE }}" 
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">MAX_RETRIES:</label>
+                        <input 
+                            type="number" 
+                            name="MAX_RETRIES" 
+                            value="{{ c.MAX_RETRIES }}" 
+                            min="1"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">RETRY_DELAY:</label>
+                        <input 
+                            type="number" 
+                            name="RETRY_DELAY" 
+                            value="{{ c.RETRY_DELAY }}" 
+                            step="0.1"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">RECONNECT_DELAY:</label>
+                        <input 
+                            type="number" 
+                            name="RECONNECT_DELAY" 
+                            value="{{ c.RECONNECT_DELAY }}" 
+                            step="0.1"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">TRANSITION_TIME:</label>
+                        <input 
+                            type="number" 
+                            name="TRANSITION_TIME" 
+                            value="{{ c.TRANSITION_TIME }}" 
+                            step="0.1"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">REQUEST_TIMEOUT:</label>
+                        <input 
+                            type="number" 
+                            name="REQUEST_TIMEOUT" 
+                            value="{{ c.REQUEST_TIMEOUT }}" 
+                            step="0.1"
+                            class="w-full px-3 py-2 rounded-md"
+                        />
+                    </div>
+                </div>
+
+                <div class="mt-6">
+                    <button type="submit" class="btn btn-primary w-full">
+                        Update Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Simulation Controls -->
+        <div class="card">
+            <h2 class="text-xl font-semibold mb-6">Simulate Button Press</h2>
+            <form method="POST" action="{{ url_for('simulate_press') }}" class="flex gap-4">
+                <button name="press_type" value="short" class="btn btn-secondary flex-1">
+                    Simulate Short Press
+                </button>
+                <button name="press_type" value="long" class="btn btn-secondary flex-1">
+                    Simulate Long Press
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
