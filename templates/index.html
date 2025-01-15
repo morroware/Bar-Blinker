@@ -138,6 +138,12 @@
       font-size: 1rem;
     }
 
+    .input-group input[type="range"] {
+      /* Slider-specific styling */
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+
     .input-group input:focus,
     .input-group select:focus {
       border-color: var(--primary);
@@ -313,14 +319,25 @@
       const modeRadios = document.querySelectorAll('input[name="mode"]');
       const effectSelect = document.getElementById('effect_index');
       const effectGroup = document.getElementById('effect_group');
+      // Additional effect options (speed and intensity) to show/hide
+      const effectOptions = document.getElementById('effect_options');
+      const effectIntensity = document.getElementById('effect_intensity');
 
       function toggleEffect() {
         if (document.querySelector('input[name="mode"]:checked').value === "effect") {
+          // Show effect dropdown
           effectSelect.disabled = false;
           effectGroup.style.display = "block";
+          // Show speed & intensity sliders
+          effectOptions.style.display = "block";
+          effectIntensity.style.display = "block";
         } else {
+          // Hide effect dropdown
           effectSelect.disabled = true;
           effectGroup.style.display = "none";
+          // Hide speed & intensity sliders
+          effectOptions.style.display = "none";
+          effectIntensity.style.display = "none";
         }
       }
 
@@ -399,6 +416,7 @@
           </label>
         </div>
 
+        <!-- Effect Dropdown -->
         <div class="input-group preset-group" id="effect_group">
           <label for="effect_index">Select Effect:</label>
           <select id="effect_index" name="effect_index">
@@ -414,6 +432,38 @@
             {% endif %}
           </select>
           <p class="input-description">Choose an effect from your WLED device</p>
+        </div>
+
+        <!-- Effect Speed Slider -->
+        <div class="input-group preset-group" id="effect_options">
+          <label for="DEFAULT_EFFECT_SPEED">Effect Speed (0-255)</label>
+          <input
+            type="range"
+            id="DEFAULT_EFFECT_SPEED"
+            name="DEFAULT_EFFECT_SPEED"
+            min="0"
+            max="255"
+            value="{{ c.DEFAULT_EFFECT_SPEED }}"
+          >
+          <p class="input-description">
+            Determines how fast the selected effect runs (0=slow, 255=fast).
+          </p>
+        </div>
+
+        <!-- Effect Intensity Slider -->
+        <div class="input-group preset-group" id="effect_intensity">
+          <label for="DEFAULT_EFFECT_INTENSITY">Effect Intensity (0-255)</label>
+          <input
+            type="range"
+            id="DEFAULT_EFFECT_INTENSITY"
+            name="DEFAULT_EFFECT_INTENSITY"
+            min="0"
+            max="255"
+            value="{{ c.DEFAULT_EFFECT_INTENSITY }}"
+          >
+          <p class="input-description">
+            Determines how intense or vivid the effect is (0=subtle, 255=strong).
+          </p>
         </div>
 
         <button type="submit" class="btn btn-success">
