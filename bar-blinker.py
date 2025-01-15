@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 A Flask-based Raspberry Pi WLED controller application
-with speed & intensity controls and NO CSRF checks.
 """
 
 import configparser
