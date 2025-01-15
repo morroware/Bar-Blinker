@@ -22,6 +22,7 @@
       --hover: #2D3748;
       --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
       --accent: #4F46E5;
+      --warning: #F59E0B;
     }
 
     /* Basic Reset & Smooth Transitions */
@@ -30,24 +31,30 @@
       margin: 0;
       padding: 0;
       transition: all 0.2s ease;
+      font-family: Arial, sans-serif;
     }
 
-    /* Body Styling */
     body {
-      font-family: Arial, sans-serif;
       background-color: var(--background);
       color: var(--text);
       line-height: 1.6;
       min-height: 100vh;
-      padding: 1rem;
     }
 
-    /* Responsive Container */
+    a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* Container */
     .container {
       max-width: 800px;
       margin: 0 auto;
       width: 100%;
-      padding: 0 1rem;
+      padding: 1rem;
     }
 
     /* Header */
@@ -55,16 +62,13 @@
       text-align: center;
       margin-bottom: 2rem;
     }
-
     .header h1 {
       margin-bottom: 0.5rem;
-      color: var(--text);
       font-size: 2rem;
       background: linear-gradient(to right, var(--primary), var(--accent));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-
     .header p {
       color: var(--text-secondary);
       font-size: 1rem;
@@ -79,12 +83,10 @@
       box-shadow: var(--shadow);
       border: 1px solid var(--border);
     }
-
     .card:hover {
       transform: translateY(-2px);
       box-shadow: 0 8px 12px -1px rgba(0, 0, 0, 0.3);
     }
-
     .card-header {
       display: flex;
       justify-content: space-between;
@@ -94,60 +96,26 @@
       border-bottom: 1px solid var(--border);
     }
 
+    /* Section Title & Icon */
     .section-title {
       display: flex;
       align-items: center;
-      font-size: 1.2em;
-      color: var(--text);
       gap: 0.5rem;
+      font-size: 1.2rem;
     }
-
     .section-icon {
-      width: 24px;
-      height: 24px;
-      fill: var(--primary);
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
     }
 
-    /* Forms */
-    form {
-      display: block;
-      width: 100%;
+    /* Grid Utilities */
+    .grid {
+      display: grid;
+      gap: 1rem;
     }
-
-    /* Input Groups */
-    .input-group {
-      margin-bottom: 1rem;
-    }
-
-    .input-group label {
-      display: block;
-      margin-bottom: 0.5rem;
-      color: var(--text);
-      font-weight: 500;
-    }
-
-    .input-group input,
-    .input-group select {
-      width: 100%;
-      padding: 0.75rem 1rem;
-      background: var(--input-bg);
-      border: 1px solid var(--border);
-      border-radius: 0.5rem;
-      color: var(--text);
-      outline: none;
-      font-size: 1rem;
-    }
-
-    .input-group input[type="range"] {
-      /* Slider-specific styling */
-      cursor: pointer;
-      margin-top: 0.5rem;
-    }
-
-    .input-group input:focus,
-    .input-group select:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    .grid-2 {
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     }
 
     /* Buttons */
@@ -162,113 +130,223 @@
       font-size: 0.9em;
       border: none;
       color: #fff;
-      transition: all 0.2s ease;
+      background-color: var(--primary);
+      transition: background-color 0.2s ease, transform 0.2s ease;
     }
-
     .btn svg {
       width: 16px;
       height: 16px;
     }
-
+    .btn:hover {
+      background-color: var(--primary-hover);
+      transform: translateY(-1px);
+    }
     .btn-primary {
       background-color: var(--primary);
     }
     .btn-primary:hover {
       background-color: var(--primary-hover);
-      transform: translateY(-1px);
     }
-
     .btn-success {
       background-color: var(--success);
     }
     .btn-success:hover {
       background-color: var(--success-hover);
-      transform: translateY(-1px);
     }
 
-    .btn-danger {
-      background-color: var(--danger);
-    }
-    .btn-danger:hover {
-      background-color: var(--danger-hover);
-      transform: translateY(-1px);
-    }
-
-    /* Radio Buttons (mode selection) */
-    .mode-selection {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-
-    .mode-selection label {
-      color: var(--text);
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      cursor: pointer;
-      padding: 0.5rem 1rem;
-      border-radius: 0.5rem;
-      transition: background 0.2s;
-    }
-
-    .mode-selection label:hover {
-      background: var(--hover);
-    }
-
-    .mode-selection input[type="radio"] {
-      width: 1.25rem;
-      height: 1.25rem;
-      border-radius: 50%;
-      border: 2px solid var(--border);
-      appearance: none;
+    /* Button Loading State */
+    .btn.loading {
       position: relative;
-      cursor: pointer;
+      pointer-events: none;
+      opacity: 0.8;
     }
-    .mode-selection input[type="radio"]:checked {
-      border-color: var(--primary);
-    }
-    .mode-selection input[type="radio"]:checked::after {
+    .btn.loading::after {
       content: '';
       position: absolute;
-      width: 0.75rem;
-      height: 0.75rem;
-      background: var(--primary);
+      right: 1rem;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid white;
       border-radius: 50%;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+      border-top-color: transparent;
+      animation: rotate 1s linear infinite;
     }
 
-    /* Dropdown for Effects */
-    .preset-group {
-      display: none; /* Hidden by default */
+    /* Forms & Inputs */
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
     }
-
-    /* Warnings and Descriptions */
-    .warning {
-      color: var(--danger);
-      font-size: 0.9em;
-      margin-top: 5px;
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .input-group .warning {
+      color: var(--warning);
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+      gap: 0.25rem;
     }
-
+    input[type="text"],
+    input[type="number"],
+    select {
+      background-color: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.5rem;
+      color: var(--text);
+    }
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+    input.changed,
+    select.changed {
+      border-color: var(--warning);
+      background-color: rgba(245, 158, 11, 0.1);
+    }
     .input-description {
       font-size: 0.85rem;
       color: var(--text-secondary);
-      margin-top: 0.375rem;
     }
 
-    /* Grid Layout for Forms */
-    .grid {
-      display: grid;
+    /* Radio Buttons */
+    .mode-selection {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .mode-selection label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: normal;
+      cursor: pointer;
+    }
+    .mode-selection input[type="radio"] {
+      accent-color: var(--primary);
+      transform: scale(1.2);
+    }
+
+    /* Range Input Styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      height: 8px;
+      background: var(--input-bg);
+      border-radius: 4px;
+      background-image: linear-gradient(var(--primary), var(--primary));
+      background-size: 0% 100%;
+      background-repeat: no-repeat;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 20px;
+      width: 20px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(3px);
+      z-index: 9999;
+    }
+    .loading-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+    .loading-spinner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       gap: 1rem;
     }
-    .grid-2 {
-      grid-template-columns: 1fr 1fr;
+    .spinner {
+      width: 50px;
+      height: 50px;
+      animation: rotate 2s linear infinite;
+    }
+    .spinner circle {
+      stroke: var(--primary);
+      stroke-linecap: round;
+      animation: dash 1.5s ease-in-out infinite;
+    }
+
+    /* Status & Toasts */
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+    .status-item {
+      background: var(--input-bg);
+      padding: 1rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+    }
+    .status-label {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .status-value {
+      font-size: 1.25rem;
+    }
+    .error-text {
+      color: var(--danger);
+      font-size: 0.9rem;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      border-radius: 1rem;
+      font-size: 0.8rem;
+      margin-left: 0.75rem;
+      text-transform: capitalize;
+    }
+    .status-badge.healthy {
+      background-color: var(--success);
+      color: white;
+    }
+    .status-badge.degraded {
+      background-color: var(--warning);
+      color: white;
+    }
+    .status-badge.critical {
+      background-color: var(--danger);
+      color: white;
+    }
+    .status-badge.initializing {
+      background-color: var(--primary);
+      color: white;
+    }
+    .mono {
+      font-family: monospace;
+      word-break: break-all;
+      font-size: 0.95rem;
     }
 
     /* Footer */
@@ -276,81 +354,42 @@
       text-align: center;
       margin-top: 2rem;
       color: var(--text-secondary);
-      font-size: 0.9em;
+      font-size: 0.9rem;
     }
 
-    /* MEDIA QUERIES - Mobile Friendliness */
+    /* Animations */
+    @keyframes rotate {
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes dash {
+      0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
+      50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+      100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+    }
+
+    /* Responsive */
     @media (max-width: 640px) {
       .container {
         padding: 0 0.5rem;
       }
-
       .card-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 1rem;
       }
-
-      .section-title {
-        font-size: 1rem;
-      }
-
-      /* Make forms stack vertically on mobile */
-      .grid-2 {
+      .status-grid {
         grid-template-columns: 1fr;
       }
-
-      .mode-selection {
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
-      /* Buttons go full width on very small screens */
       .btn {
         width: 100%;
         justify-content: center;
       }
+      .mode-selection {
+        flex-direction: column;
+      }
     }
   </style>
-
-  <script>
-    // JavaScript to handle dynamic enabling/disabling of effect selection
-    document.addEventListener("DOMContentLoaded", function() {
-      const modeRadios = document.querySelectorAll('input[name="mode"]');
-      const effectSelect = document.getElementById('effect_index');
-      const effectGroup = document.getElementById('effect_group');
-      // Additional effect options (speed and intensity) to show/hide
-      const effectOptions = document.getElementById('effect_options');
-      const effectIntensity = document.getElementById('effect_intensity');
-
-      function toggleEffect() {
-        if (document.querySelector('input[name="mode"]:checked').value === "effect") {
-          // Show effect dropdown
-          effectSelect.disabled = false;
-          effectGroup.style.display = "block";
-          // Show speed & intensity sliders
-          effectOptions.style.display = "block";
-          effectIntensity.style.display = "block";
-        } else {
-          // Hide effect dropdown
-          effectSelect.disabled = true;
-          effectGroup.style.display = "none";
-          // Hide speed & intensity sliders
-          effectOptions.style.display = "none";
-          effectIntensity.style.display = "none";
-        }
-      }
-
-      modeRadios.forEach(radio => {
-        radio.addEventListener('change', toggleEffect);
-      });
-
-      // Initialize on page load
-      toggleEffect();
-    });
-  </script>
 </head>
-
 <body class="dark">
   <div class="container">
     <!-- Header -->
@@ -363,15 +402,13 @@
     <div class="card">
       <div class="card-header">
         <h2 class="section-title">
-          <!-- SVG Icon -->
           <svg class="section-icon" viewBox="0 0 24 24">
             <path fill="currentColor" d="M8 5v14l11-7z"/>
           </svg>
           Test Controls
         </h2>
       </div>
-
-      <form method="POST" action="{{ url_for('simulate_press') }}" class="test-controls">
+      <form method="POST" action="{{ url_for('simulate_press') }}">
         <button name="press_type" value="short" class="btn btn-primary" type="submit">
           <svg viewBox="0 0 24 24">
             <path fill="currentColor" d="M8 5v14l11-7z"/>
@@ -391,17 +428,12 @@
     <div class="card">
       <div class="card-header">
         <h2 class="section-title">
-          <!-- SVG Icon -->
           <svg class="section-icon" viewBox="0 0 24 24">
-            <path fill="currentColor"
-                  d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6
-                     6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4
-                     4-4 4 1.79 4 4-1.79 4-4 4z"/>
+            <path fill="currentColor" d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
           </svg>
           LED Mode Configuration
         </h2>
       </div>
-
       <form method="POST" action="{{ url_for('update_config') }}">
         <div class="mode-selection">
           <label>
@@ -416,7 +448,6 @@
           </label>
         </div>
 
-        <!-- Effect Dropdown -->
         <div class="input-group preset-group" id="effect_group">
           <label for="effect_index">Select Effect:</label>
           <select id="effect_index" name="effect_index">
@@ -434,41 +465,21 @@
           <p class="input-description">Choose an effect from your WLED device</p>
         </div>
 
-        <!-- Effect Speed Slider -->
         <div class="input-group preset-group" id="effect_options">
           <label for="DEFAULT_EFFECT_SPEED">Effect Speed (0-255)</label>
-          <input
-            type="range"
-            id="DEFAULT_EFFECT_SPEED"
-            name="DEFAULT_EFFECT_SPEED"
-            min="0"
-            max="255"
-            value="{{ c.DEFAULT_EFFECT_SPEED }}"
-          >
-          <p class="input-description">
-            Determines how fast the selected effect runs (0=slow, 255=fast).
-          </p>
+          <input type="range" id="DEFAULT_EFFECT_SPEED" name="DEFAULT_EFFECT_SPEED"
+                 min="0" max="255" value="{{ c.DEFAULT_EFFECT_SPEED }}">
+          <p class="input-description">Determines how fast the selected effect runs</p>
         </div>
 
-        <!-- Effect Intensity Slider -->
         <div class="input-group preset-group" id="effect_intensity">
           <label for="DEFAULT_EFFECT_INTENSITY">Effect Intensity (0-255)</label>
-          <input
-            type="range"
-            id="DEFAULT_EFFECT_INTENSITY"
-            name="DEFAULT_EFFECT_INTENSITY"
-            min="0"
-            max="255"
-            value="{{ c.DEFAULT_EFFECT_INTENSITY }}"
-          >
-          <p class="input-description">
-            Determines how intense or vivid the effect is (0=subtle, 255=strong).
-          </p>
+          <input type="range" id="DEFAULT_EFFECT_INTENSITY" name="DEFAULT_EFFECT_INTENSITY"
+                 min="0" max="255" value="{{ c.DEFAULT_EFFECT_INTENSITY }}">
+          <p class="input-description">Determines how intense the effect appears</p>
         </div>
 
-        <button type="submit" class="btn btn-success">
-          Apply LED Mode
-        </button>
+        <button type="submit" class="btn btn-success">Apply LED Mode</button>
       </form>
     </div>
 
@@ -476,40 +487,31 @@
     <div class="card">
       <div class="card-header">
         <h2 class="section-title">
-          <!-- SVG Icon -->
           <svg class="section-icon" viewBox="0 0 24 24">
-            <path fill="currentColor"
-                  d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2
-                     2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4
-                     10H4V5h14v14zM6 13h5v4H6zm6-6h4v3h-4zM6 7h5v5H6zm6 4h4v6h-4z"/>
+            <path fill="currentColor" d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14z"/>
           </svg>
           Hardware Configuration
         </h2>
       </div>
-
       <form method="POST" action="{{ url_for('update_config') }}">
         <div class="input-group">
-          <label>GPIO Button Pin</label>
-          <input type="number" name="BUTTON_PIN" value="{{ c.BUTTON_PIN }}" readonly>
+          <label for="BUTTON_PIN">GPIO Button Pin</label>
+          <input id="BUTTON_PIN" type="number" name="BUTTON_PIN" value="{{ c.BUTTON_PIN }}" readonly>
           <div class="warning">
             <svg width="16" height="16" viewBox="0 0 24 24">
-              <path fill="currentColor"
-                    d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5 10l7
-                       5 7-5zM12 2l9 7-9 7-9-7 9-7z"/>
+              <path fill="currentColor" d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5 10l7 5 7-5zM12 2l9 7-9 7-9-7 9-7z"/>
             </svg>
             Restart required if changed
           </div>
         </div>
 
         <div class="input-group">
-          <label>WLED IP Address</label>
-          <input type="text" name="WLED_IP" value="{{ c.WLED_IP }}" required>
-          <p class="input-description">IP address of your WLED device on the local network</p>
+          <label for="WLED_IP">WLED IP Address</label>
+          <input id="WLED_IP" type="text" name="WLED_IP" value="{{ c.WLED_IP }}" required>
+          <p class="input-description">IP address of your WLED device</p>
         </div>
 
-        <button type="submit" class="btn btn-success">
-          Apply Hardware Settings
-        </button>
+        <button type="submit" class="btn btn-success">Apply Hardware Settings</button>
       </form>
     </div>
 
@@ -517,46 +519,36 @@
     <div class="card">
       <div class="card-header">
         <h2 class="section-title">
-          <!-- SVG Icon -->
           <svg class="section-icon" viewBox="0 0 24 24">
-            <path fill="currentColor"
-                  d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5 10l7 5
-                     7-5zM12 2l9 7-9 7-9-7 9-7z"/>
+            <path fill="currentColor" d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5 10l7 5 7-5zM12 2l9 7-9 7-9-7 9-7z"/>
           </svg>
           Timing Configuration
         </h2>
       </div>
-
       <form method="POST" action="{{ url_for('update_config') }}">
         <div class="grid grid-2">
           <div class="input-group">
-            <label>Long Press Threshold (seconds)</label>
-            <input type="number" name="LONG_PRESS_THRESHOLD"
-                   value="{{ c.LONG_PRESS_THRESHOLD }}"
-                   step="0.1" min="0.1" required>
-            <p class="input-description">Seconds to hold for long press (green to red)</p>
+            <label for="LONG_PRESS_THRESHOLD">Long Press Threshold (seconds)</label>
+            <input id="LONG_PRESS_THRESHOLD" type="number" name="LONG_PRESS_THRESHOLD"
+                   value="{{ c.LONG_PRESS_THRESHOLD }}" step="0.1" min="0.1" required>
+            <p class="input-description">Seconds to hold for long press</p>
           </div>
 
           <div class="input-group">
-            <label>Short Flash Duration (seconds)</label>
-            <input type="number" name="SHORT_FLASH_DURATION"
-                   value="{{ c.SHORT_FLASH_DURATION }}"
-                   step="0.1" min="0.1" required>
-            <p class="input-description">How long to blink after button press</p>
+            <label for="SHORT_FLASH_DURATION">Short Flash Duration (seconds)</label>
+            <input id="SHORT_FLASH_DURATION" type="number" name="SHORT_FLASH_DURATION"
+                   value="{{ c.SHORT_FLASH_DURATION }}" step="0.1" min="0.1" required>
+            <p class="input-description">How long to blink after press</p>
           </div>
 
           <div class="input-group">
-            <label>Flash Interval (seconds)</label>
-            <input type="number" name="FLASH_INTERVAL"
-                   value="{{ c.FLASH_INTERVAL }}"
-                   step="0.1" min="0.1" required>
+            <label for="FLASH_INTERVAL">Flash Interval (seconds)</label>
+            <input id="FLASH_INTERVAL" type="number" name="FLASH_INTERVAL"
+                   value="{{ c.FLASH_INTERVAL }}" step="0.1" min="0.1" required>
             <p class="input-description">Time between blinks (lower = faster)</p>
           </div>
         </div>
-
-        <button type="submit" class="btn btn-success">
-          Apply Timing Settings
-        </button>
+        <button type="submit" class="btn btn-success">Apply Timing Settings</button>
       </form>
     </div>
 
@@ -564,38 +556,29 @@
     <div class="card">
       <div class="card-header">
         <h2 class="section-title">
-          <!-- SVG Icon -->
           <svg class="section-icon" viewBox="0 0 24 24">
-            <path fill="currentColor"
-                  d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6
-                     6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4
-                     4-4 4 1.79 4 4-1.79 4-4 4z"/>
+            <path fill="currentColor" d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
           </svg>
           LED Configuration
         </h2>
       </div>
-
       <form method="POST" action="{{ url_for('update_config') }}">
         <div class="grid grid-2">
           <div class="input-group">
-            <label>Flash Brightness (0-255)</label>
-            <input type="number" name="FLASH_BRIGHTNESS" value="{{ c.FLASH_BRIGHTNESS }}"
-                   min="0" max="255" required>
-            <p class="input-description">LED brightness (0-255)</p>
+            <label for="FLASH_BRIGHTNESS">Flash Brightness (0-255)</label>
+            <input id="FLASH_BRIGHTNESS" type="number" name="FLASH_BRIGHTNESS"
+                   value="{{ c.FLASH_BRIGHTNESS }}" min="0" max="255" required>
+            <p class="input-description">LED brightness during flashing</p>
           </div>
 
           <div class="input-group">
-            <label>Transition Time (seconds)</label>
-            <input type="number" name="TRANSITION_TIME"
-                   value="{{ c.TRANSITION_TIME }}"
-                   step="0.1" min="0" required>
+            <label for="TRANSITION_TIME">Transition Time (seconds)</label>
+            <input id="TRANSITION_TIME" type="number" name="TRANSITION_TIME"
+                   value="{{ c.TRANSITION_TIME }}" step="0.1" min="0" required>
             <p class="input-description">Color fade duration in seconds</p>
           </div>
         </div>
-
-        <button type="submit" class="btn btn-success">
-          Apply LED Settings
-        </button>
+        <button type="submit" class="btn btn-success">Apply LED Settings</button>
       </form>
     </div>
 
@@ -603,81 +586,81 @@
     <div class="card">
       <div class="card-header">
         <h2 class="section-title">
-          <!-- SVG Icon -->
           <svg class="section-icon" viewBox="0 0 24 24">
-            <path fill="currentColor"
-                  d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5
-                     10l7 5 7-5z"/>
+            <path fill="currentColor" d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5 10l7 5 7-5zM12 2l9 7-9 7-9-7 9-7z"/>
           </svg>
           Connection Settings
         </h2>
       </div>
-
       <form method="POST" action="{{ url_for('update_config') }}">
         <div class="grid grid-2">
           <div class="input-group">
-            <label>Maximum Retries</label>
-            <input type="number" name="MAX_RETRIES" value="{{ c.MAX_RETRIES }}" min="1" required>
+            <label for="MAX_RETRIES">Maximum Retries</label>
+            <input id="MAX_RETRIES" type="number" name="MAX_RETRIES"
+                   value="{{ c.MAX_RETRIES }}" min="1" required>
           </div>
 
           <div class="input-group">
-            <label>Retry Delay (seconds)</label>
-            <input type="number" name="RETRY_DELAY"
-                   value="{{ c.RETRY_DELAY }}"
-                   step="0.1" min="0.1" required>
+            <label for="RETRY_DELAY">Retry Delay (seconds)</label>
+            <input id="RETRY_DELAY" type="number" name="RETRY_DELAY"
+                   value="{{ c.RETRY_DELAY }}" step="0.1" min="0.1" required>
           </div>
 
           <div class="input-group">
-            <label>Reconnection Delay (seconds)</label>
-            <input type="number" name="RECONNECT_DELAY"
-                   value="{{ c.RECONNECT_DELAY }}"
-                   step="0.1" min="0.1" required>
+            <label for="RECONNECT_DELAY">Reconnection Delay (seconds)</label>
+            <input id="RECONNECT_DELAY" type="number" name="RECONNECT_DELAY"
+                   value="{{ c.RECONNECT_DELAY }}" step="0.1" min="0.1" required>
           </div>
 
           <div class="input-group">
-            <label>Request Timeout (seconds)</label>
-            <input type="number" name="REQUEST_TIMEOUT"
-                   value="{{ c.REQUEST_TIMEOUT }}"
-                   step="0.1" min="0.1" required>
+            <label for="REQUEST_TIMEOUT">Request Timeout (seconds)</label>
+            <input id="REQUEST_TIMEOUT" type="number" name="REQUEST_TIMEOUT"
+                   value="{{ c.REQUEST_TIMEOUT }}" step="0.1" min="0.1" required>
           </div>
         </div>
-
-        <button type="submit" class="btn btn-success">
-          Apply Connection Settings
-        </button>
+        <button type="submit" class="btn btn-success">Apply Connection Settings</button>
       </form>
     </div>
 
     <!-- System Status -->
-    <div class="card">
+    <div class="card" id="system-status">
       <div class="card-header">
         <h2 class="section-title">
-          <!-- SVG Icon -->
           <svg class="section-icon" viewBox="0 0 24 24">
-            <path fill="currentColor"
-                  d="M11 9h2V7h-2m1 13c-4.41 0-8-3.59-8-8s3.59-8
-                     8-8 8 3.59 8 8-3.59 8-8 8m0-18A10 10 0 0 0
-                     2 12a10 10 0 0 0 10 10 10 10 0 0 0
-                     10-10A10 10 0 0 0 12 2m1 15h-2v2h2v-2zm0-6h-2v4h2v-4z"/>
+            <path fill="currentColor" d="M11 9h2V7h-2m1 13c-4.41 0-8-3.59-8-8s3.57-8 7.99-8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
           </svg>
           System Status
+          <span id="status-indicator" class="status-badge initializing">Initializing</span>
         </h2>
+        <button onclick="refreshStatus()" class="btn btn-primary refresh-btn">
+          <svg viewBox="0 0 24 24">
+            <path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+          Refresh
+        </button>
       </div>
-      <div class="grid grid-2">
-        <div class="input-group">
-          <label>Log File Location</label>
-          <input type="text" value="{{ c.LOG_FILE }}" readonly>
+      <div class="status-grid">
+        <div class="status-item">
+          <div class="status-label">Connection Status</div>
+          <div id="connection-status" class="status-value">Unknown</div>
+          <div id="last-connection" class="status-detail"></div>
         </div>
-        <div class="input-group">
-          <label>Connection Status</label>
-          <div class="warning">
-            <svg width="16" height="16" viewBox="0 0 24 24">
-              <path fill="currentColor"
-                    d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5
-                       10l7 5 7-5zM12 2l9 7-9 7-9-7 9-7z"/>
-            </svg>
-            Check log file for detailed status information
-          </div>
+        
+        <div class="status-item">
+          <div class="status-label">Failed Attempts</div>
+          <div id="failed-attempts" class="status-value">0</div>
+          <div id="last-error" class="status-detail error-text"></div>
+        </div>
+
+        <div class="status-item">
+          <div class="status-label">Button Presses</div>
+          <div id="button-count" class="status-value">0</div>
+          <div class="status-detail">Total since startup</div>
+        </div>
+
+        <div class="status-item">
+          <div class="status-label">Log Location</div>
+          <div class="status-value mono">{{ c.LOG_FILE }}</div>
         </div>
       </div>
     </div>
@@ -687,5 +670,77 @@
       <p>&copy; 2025 Bar-Blinker Control Panel. All rights reserved.</p>
     </div>
   </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay">
+    <div class="loading-spinner">
+      <svg viewBox="0 0 50 50" class="spinner">
+        <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="5"></circle>
+      </svg>
+      <div class="loading-text">Processing...</div>
+    </div>
+  </div>
+
+  <script>
+    // Show the loading overlay on any form submit
+    document.addEventListener('DOMContentLoaded', () => {
+      const loadingOverlay = document.querySelector('.loading-overlay');
+
+      document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', () => {
+          loadingOverlay.classList.add('active');
+        });
+      });
+
+      // Real-time status checks from /health endpoint
+      window.refreshStatus = function() {
+        fetch("/health")
+          .then(response => {
+            if (!response.ok) {
+              throw new Error("Network response was not ok: " + response.status);
+            }
+            return response.json();
+          })
+          .then(data => {
+            console.log("System Health:", data);
+
+            // Update the UI elements:
+            const statusIndicator = document.getElementById("status-indicator");
+            const connectionStatus = document.getElementById("connection-status");
+            const failedAttempts = document.getElementById("failed-attempts");
+            const buttonCount = document.getElementById("button-count");
+            const lastError = document.getElementById("last-error");
+            const lastConnection = document.getElementById("last-connection");
+
+            // Status badge text & class
+            statusIndicator.textContent = data.status;
+            // clear out old classes, then add new
+            statusIndicator.className = "status-badge " + data.status;
+
+            // Update connection status & details
+            connectionStatus.textContent = data.status;
+            failedAttempts.textContent = data.failed_attempts || 0;
+            buttonCount.textContent = data.button_press_count || 0;
+            lastConnection.textContent = data.last_successful_connection 
+              ? `Last connected: ${data.last_successful_connection}`
+              : "No successful connection yet";
+            lastError.textContent = data.last_error ? data.last_error : "";
+          })
+          .catch(error => {
+            console.error("Error fetching health:", error);
+          });
+      };
+
+      // Range input background fill
+      document.querySelectorAll('input[type="range"]').forEach(r => {
+        const updateRangeBG = () => {
+          const val = ((r.value - r.min) / (r.max - r.min)) * 100;
+          r.style.backgroundSize = `${val}% 100%`;
+        };
+        r.addEventListener('input', updateRangeBG);
+        updateRangeBG();
+      });
+    });
+  </script>
 </body>
 </html>
