@@ -1,410 +1,641 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WLED Control Panel</title>
-    <style>
-        :root {
-            --primary: #2563eb;
-            --primary-hover: #1d4ed8;
-            --success: #059669;
-            --success-hover: #047857;
-            --danger: #dc2626;
-            --surface: #1e293b;
-            --surface-alt: #2a3a53;
-            --text: #e2e8f0;
-            --text-dim: #94a3b8;
-            --border: #384a68;
-            --radius: 8px;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bar-Blinker Control Panel</title>
+  <style>
+    /* Dark Theme Variables */
+    :root {
+      --primary: #3B82F6;
+      --primary-hover: #2563EB;
+      --success: #10B981;
+      --success-hover: #059669;
+      --danger: #EF4444;
+      --danger-hover: #DC2626;
+      --background: #111827;
+      --card-bg: #1F2937;
+      --text: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --border: #374151;
+      --input-bg: #272F3D;
+      --hover: #2D3748;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+      --accent: #4F46E5;
+    }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    /* Basic Reset & Smooth Transitions */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      transition: all 0.2s ease;
+    }
 
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background: #0f172a;
-            color: var(--text);
-            line-height: 1.5;
-            padding: 1rem;
-        }
+    /* Body Styling */
+    body {
+      font-family: Arial, sans-serif;
+      background-color: var(--background);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      padding: 1rem;
+    }
 
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
+    /* Responsive Container */
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 0 1rem;
+    }
 
-        .header {
-            text-align: center;
-            margin-bottom: 2rem;
-            padding: 2rem;
-            background: var(--surface);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-        }
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
 
-        .header h1 {
-            font-size: 1.8rem;
-            margin-bottom: 0.5rem;
-            color: var(--primary);
-        }
+    .header h1 {
+      margin-bottom: 0.5rem;
+      color: var(--text);
+      font-size: 2rem;
+      background: linear-gradient(to right, var(--primary), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
 
-        .header p {
-            color: var(--text-dim);
-        }
+    .header p {
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
 
-        .card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: var(--shadow);
-        }
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 0.75rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+    }
 
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border);
-        }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 12px -1px rgba(0, 0, 0, 0.3);
+    }
 
-        .section-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--primary);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
 
-        .section-icon {
-            width: 20px;
-            height: 20px;
-            fill: currentColor;
-        }
+    .section-title {
+      display: flex;
+      align-items: center;
+      font-size: 1.2em;
+      color: var(--text);
+      gap: 0.5rem;
+    }
 
-        .input-group {
-            margin-bottom: 1.5rem;
-        }
+    .section-icon {
+      width: 24px;
+      height: 24px;
+      fill: var(--primary);
+    }
 
-        .input-group:last-child {
-            margin-bottom: 0;
-        }
+    /* Forms */
+    form {
+      display: block;
+      width: 100%;
+    }
 
-        .input-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text);
-            font-weight: 500;
-        }
+    /* Input Groups */
+    .input-group {
+      margin-bottom: 1rem;
+    }
 
-        .input-description {
-            font-size: 0.875rem;
-            color: var(--text-dim);
-            margin-top: 0.375rem;
-        }
+    .input-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+      font-weight: 500;
+    }
 
-        input {
-            width: 100%;
-            padding: 0.625rem;
-            background: var(--surface-alt);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            color: var(--text);
-            font-size: 0.875rem;
-            transition: all 0.2s;
-        }
+    .input-group input,
+    .input-group select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      color: var(--text);
+      outline: none;
+      font-size: 1rem;
+    }
 
-        input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
+    .input-group input:focus,
+    .input-group select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
 
-        input:read-only {
-            background: var(--surface);
-            cursor: not-allowed;
-            opacity: 0.7;
-        }
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 0.9em;
+      border: none;
+      color: #fff;
+      transition: all 0.2s ease;
+    }
 
-        .grid {
-            display: grid;
-            gap: 1rem;
-        }
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
 
-        @media (min-width: 768px) {
-            .grid-2 {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
+    .btn-primary {
+      background-color: var(--primary);
+    }
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+      transform: translateY(-1px);
+    }
 
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.5rem 1rem;
-            border-radius: var(--radius);
-            font-weight: 500;
-            font-size: 0.875rem;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s;
-            gap: 0.5rem;
-            color: white;
-        }
+    .btn-success {
+      background-color: var(--success);
+    }
+    .btn-success:hover {
+      background-color: var(--success-hover);
+      transform: translateY(-1px);
+    }
 
-        .btn-primary {
-            background: var(--primary);
-        }
+    .btn-danger {
+      background-color: var(--danger);
+    }
+    .btn-danger:hover {
+      background-color: var(--danger-hover);
+      transform: translateY(-1px);
+    }
 
-        .btn-primary:hover {
-            background: var(--primary-hover);
-        }
+    /* Radio Buttons (mode selection) */
+    .mode-selection {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
 
-        .btn-success {
-            background: var(--success);
-        }
+    .mode-selection label {
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      transition: background 0.2s;
+    }
 
-        .btn-success:hover {
-            background: var(--success-hover);
-        }
+    .mode-selection label:hover {
+      background: var(--hover);
+    }
 
-        .btn-danger {
-            background: var(--danger);
-        }
+    .mode-selection input[type="radio"] {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      appearance: none;
+      position: relative;
+      cursor: pointer;
+    }
+    .mode-selection input[type="radio"]:checked {
+      border-color: var(--primary);
+    }
+    .mode-selection input[type="radio"]:checked::after {
+      content: '';
+      position: absolute;
+      width: 0.75rem;
+      height: 0.75rem;
+      background: var(--primary);
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
 
-        .warning {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: rgba(234, 179, 8, 0.1);
-            border-left: 3px solid #eab308;
-            border-radius: var(--radius);
-            color: #fbbf24;
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-        }
+    /* Dropdown for Effects */
+    .preset-group {
+      display: none; /* Hidden by default */
+    }
 
-        .test-controls {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-            margin-top: 1rem;
+    /* Warnings and Descriptions */
+    .warning {
+      color: var(--danger);
+      font-size: 0.9em;
+      margin-top: 5px;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .input-description {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: 0.375rem;
+    }
+
+    /* Grid Layout for Forms */
+    .grid {
+      display: grid;
+      gap: 1rem;
+    }
+    .grid-2 {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      color: var(--text-secondary);
+      font-size: 0.9em;
+    }
+
+    /* MEDIA QUERIES - Mobile Friendliness */
+    @media (max-width: 640px) {
+      .container {
+        padding: 0 0.5rem;
+      }
+
+      .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+
+      .section-title {
+        font-size: 1rem;
+      }
+
+      /* Make forms stack vertically on mobile */
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .mode-selection {
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      /* Buttons go full width on very small screens */
+      .btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+
+  <script>
+    // JavaScript to handle dynamic enabling/disabling of effect selection
+    document.addEventListener("DOMContentLoaded", function() {
+      const modeRadios = document.querySelectorAll('input[name="mode"]');
+      const effectSelect = document.getElementById('effect_index');
+      const effectGroup = document.getElementById('effect_group');
+
+      function toggleEffect() {
+        if (document.querySelector('input[name="mode"]:checked').value === "effect") {
+          effectSelect.disabled = false;
+          effectGroup.style.display = "block";
+        } else {
+          effectSelect.disabled = true;
+          effectGroup.style.display = "none";
         }
-    </style>
+      }
+
+      modeRadios.forEach(radio => {
+        radio.addEventListener('change', toggleEffect);
+      });
+
+      // Initialize on page load
+      toggleEffect();
+    });
+  </script>
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <h1>Bar-Blinker Control Panel</h1>
-            <p>Configure and manage your WLED Bar-Blinker device settings</p>
-        </header>
-                <!-- Test Controls -->
-                <div class="card">
-                    <div class="card-header">
-                        <h2 class="section-title">
-                            <svg class="section-icon" viewBox="0 0 24 24">
-                                <path fill="currentColor" d="M21 3H3v18h18V3zm-6 6h-4v2h4v6H8v-2h4v-2H8V7h7v2z"/>
-                            </svg>
-                            Test Controls
-                        </h2>
-                        <p class="input-description">Verify your settings by simulating button presses</p>
-                    </div>
-                    
-                    <form method="POST" action="{{ url_for('simulate_press') }}" class="test-controls">
-                        <button name="press_type" value="short" class="btn btn-primary">
-                            <svg width="16" height="16" viewBox="0 0 24 24">
-                                <path fill="currentColor" d="M8 5v14l11-7z"/>
-                            </svg>
-                            Simulate Short Press
-                        </button>
-                        <button name="press_type" value="long" class="btn btn-primary">
-                            <svg width="16" height="16" viewBox="0 0 24 24">
-                                <path fill="currentColor" d="M6 6h12v12H6z"/>
-                            </svg>
-                            Simulate Long Press
-                        </button>
-                    </form>
-                </div>
-        
-        <!-- Hardware Configuration -->
-        <form method="POST" action="{{ url_for('update_config') }}" class="card">
-            <div class="card-header">
-                <h2 class="section-title">
-                    <svg class="section-icon" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14zM6 13h5v4H6zm6-6h4v3h-4zM6 7h5v5H6zm6 4h4v6h-4z"/>
-                    </svg>
-                    Hardware Configuration
-                </h2>
-                <input type="hidden" name="section" value="hardware">
-                <button type="submit" class="btn btn-success">
-                    Apply Hardware Settings
-                </button>
-            </div>
-            
-            <div class="input-group">
-                <label class="input-label">GPIO Button Pin</label>
-                <input type="number" name="BUTTON_PIN" value="{{ c.BUTTON_PIN }}" readonly>
-                <div class="warning">
-                    <svg width="16" height="16" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M12 5.99L19.53 19H4.47L12 5.99M12 2L1 21h22L12 2zm1 14h-2v2h2v-2zm0-6h-2v4h2v-4z"/>
-                    </svg>
-                    Restart required if changed
-                </div>
-            </div>
 
-            <div class="input-group">
-                <label class="input-label">WLED IP Address</label>
-                <input type="text" name="WLED_IP" value="{{ c.WLED_IP }}">
-                <p class="input-description">IP address of your WLED device on the local network</p>
-            </div>
-        </form>
+<body class="dark">
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1>Bar-Blinker Control Panel</h1>
+      <p>Configure and manage your WLED Bar-Blinker device settings</p>
+    </header>
 
-        <!-- Timing Configuration -->
-        <form method="POST" action="{{ url_for('update_config') }}" class="card">
-            <div class="card-header">
-                <h2 class="section-title">
-                    <svg class="section-icon" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7z"/>
-                    </svg>
-                    Timing Configuration
-                </h2>
-                <input type="hidden" name="section" value="timing">
-                <button type="submit" class="btn btn-success">
-                    Apply Timing Settings
-                </button>
-            </div>
-            
-            <div class="grid grid-2">
-                <div class="input-group">
-                    <label class="input-label">Long Press Threshold</label>
-                    <input type="number" name="LONG_PRESS_THRESHOLD" value="{{ c.LONG_PRESS_THRESHOLD }}" 
-                           step="0.1" min="0.1">
-                    <p class="input-description">Seconds to hold for long press (green to red)</p>
-                </div>
+    <!-- Test Controls -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="section-title">
+          <!-- SVG Icon -->
+          <svg class="section-icon" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M8 5v14l11-7z"/>
+          </svg>
+          Test Controls
+        </h2>
+      </div>
 
-                <div class="input-group">
-                    <label class="input-label">Short Flash Duration</label>
-                    <input type="number" name="SHORT_FLASH_DURATION" value="{{ c.SHORT_FLASH_DURATION }}"
-                           step="0.1" min="0.1">
-                    <p class="input-description">How long to blink after button press</p>
-                </div>
-
-                <div class="input-group">
-                    <label class="input-label">Flash Interval</label>
-                    <input type="number" name="FLASH_INTERVAL" value="{{ c.FLASH_INTERVAL }}"
-                           step="0.1" min="0.1">
-                    <p class="input-description">Time between blinks (lower = faster)</p>
-                </div>
-            </div>
-        </form>
-
-        <!-- LED Configuration -->
-        <form method="POST" action="{{ url_for('update_config') }}" class="card">
-            <div class="card-header">
-                <h2 class="section-title">
-                    <svg class="section-icon" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
-                    </svg>
-                    LED Configuration
-                </h2>
-                <input type="hidden" name="section" value="led">
-                <button type="submit" class="btn btn-success">
-                    Apply LED Settings
-                </button>
-            </div>
-            
-            <div class="grid grid-2">
-                <div class="input-group">
-                    <label class="input-label">Flash Brightness</label>
-                    <input type="number" name="FLASH_BRIGHTNESS" value="{{ c.FLASH_BRIGHTNESS }}"
-                           min="0" max="255">
-                    <p class="input-description">LED brightness (0-255)</p>
-                </div>
-
-                <div class="input-group">
-                    <label class="input-label">Transition Time</label>
-                    <input type="number" name="TRANSITION_TIME" value="{{ c.TRANSITION_TIME }}"
-                           step="0.1" min="0">
-                    <p class="input-description">Color fade duration in seconds</p>
-                </div>
-            </div>
-        </form>
-
-        <!-- Connection Settings -->
-        <form method="POST" action="{{ url_for('update_config') }}" class="card">
-            <div class="card-header">
-                <h2 class="section-title">
-                    <svg class="section-icon" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5 10l7 5 7-5-7-5zm0-2l9 7-9 7-9-7 9-7z"/>
-                    </svg>
-                    Connection Settings
-                </h2>
-                <input type="hidden" name="section" value="connection">
-                <button type="submit" class="btn btn-success">
-                    Apply Connection Settings
-                </button>
-            </div>
-            
-            <div class="grid grid-2">
-                <div class="input-group">
-                    <label class="input-label">Maximum Retries</label>
-                    <input type="number" name="MAX_RETRIES" value="{{ c.MAX_RETRIES }}" min="1">
-                </div>
-
-                <div class="input-group">
-                    <label class="input-label">Retry Delay</label>
-                    <input type="number" name="RETRY_DELAY" value="{{ c.RETRY_DELAY }}"
-                           step="0.1" min="0.1">
-                </div>
-
-                <div class="input-group">
-                    <label class="input-label">Reconnection Delay</label>
-                    <input type="number" name="RECONNECT_DELAY" value="{{ c.RECONNECT_DELAY }}"
-                           step="0.1" min="0.1">
-                </div>
-
-                <div class="input-group">
-                    <label class="input-label">Request Timeout</label>
-                    <input type="number" name="REQUEST_TIMEOUT" value="{{ c.REQUEST_TIMEOUT }}"
-                           step="0.1" min="0.1">
-                </div>
-            </div>
-        </form>
-
-
-        <!-- Status Footer -->
-        <div class="card">
-            <div class="card-header">
-                <h2 class="section-title">
-                    <svg class="section-icon" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M11 9h2V7h-2m1 13c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m0-18A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2m-1 15h2v-6h-2v6z"/>
-                    </svg>
-                    System Status
-                </h2>
-            </div>
-            <div class="grid grid-2">
-                <div class="input-group">
-                    <label class="input-label">Log File Location</label>
-                    <input type="text" value="{{ c.LOG_FILE }}" readonly>
-                </div>
-                <div class="input-group">
-                    <label class="input-label">Connection Status</label>
-                    <div class="warning">
-                        Check log file for detailed status information
-                    </div>
-                </div>
-            </div>
-        </div>
+      <form method="POST" action="{{ url_for('simulate_press') }}" class="test-controls">
+        <button name="press_type" value="short" class="btn btn-primary" type="submit">
+          <svg viewBox="0 0 24 24">
+            <path fill="currentColor" d="M8 5v14l11-7z"/>
+          </svg>
+          Simulate Short Press
+        </button>
+        <button name="press_type" value="long" class="btn btn-primary" type="submit">
+          <svg viewBox="0 0 24 24">
+            <path fill="currentColor" d="M6 6h12v12H6z"/>
+          </svg>
+          Simulate Long Press
+        </button>
+      </form>
     </div>
+
+    <!-- LED Mode Configuration -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="section-title">
+          <!-- SVG Icon -->
+          <svg class="section-icon" viewBox="0 0 24 24">
+            <path fill="currentColor"
+                  d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6
+                     6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4
+                     4-4 4 1.79 4 4-1.79 4-4 4z"/>
+          </svg>
+          LED Mode Configuration
+        </h2>
+      </div>
+
+      <form method="POST" action="{{ url_for('update_config') }}">
+        <div class="mode-selection">
+          <label>
+            <input type="radio" name="mode" value="white"
+                   {% if current_mode == "white" %}checked{% endif %}>
+            Default White
+          </label>
+          <label>
+            <input type="radio" name="mode" value="effect"
+                   {% if current_mode == "effect" %}checked{% endif %}>
+            WLED Effect
+          </label>
+        </div>
+
+        <div class="input-group preset-group" id="effect_group">
+          <label for="effect_index">Select Effect:</label>
+          <select id="effect_index" name="effect_index">
+            {% if effects %}
+              {% for effect in effects %}
+                <option value="{{ loop.index0 }}"
+                  {% if loop.index0 == current_effect %}selected{% endif %}>
+                  {{ effect }}
+                </option>
+              {% endfor %}
+            {% else %}
+              <option value="" disabled>No effects available</option>
+            {% endif %}
+          </select>
+          <p class="input-description">Choose an effect from your WLED device</p>
+        </div>
+
+        <button type="submit" class="btn btn-success">
+          Apply LED Mode
+        </button>
+      </form>
+    </div>
+
+    <!-- Hardware Configuration -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="section-title">
+          <!-- SVG Icon -->
+          <svg class="section-icon" viewBox="0 0 24 24">
+            <path fill="currentColor"
+                  d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2
+                     2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4
+                     10H4V5h14v14zM6 13h5v4H6zm6-6h4v3h-4zM6 7h5v5H6zm6 4h4v6h-4z"/>
+          </svg>
+          Hardware Configuration
+        </h2>
+      </div>
+
+      <form method="POST" action="{{ url_for('update_config') }}">
+        <div class="input-group">
+          <label>GPIO Button Pin</label>
+          <input type="number" name="BUTTON_PIN" value="{{ c.BUTTON_PIN }}" readonly>
+          <div class="warning">
+            <svg width="16" height="16" viewBox="0 0 24 24">
+              <path fill="currentColor"
+                    d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5 10l7
+                       5 7-5zM12 2l9 7-9 7-9-7 9-7z"/>
+            </svg>
+            Restart required if changed
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>WLED IP Address</label>
+          <input type="text" name="WLED_IP" value="{{ c.WLED_IP }}" required>
+          <p class="input-description">IP address of your WLED device on the local network</p>
+        </div>
+
+        <button type="submit" class="btn btn-success">
+          Apply Hardware Settings
+        </button>
+      </form>
+    </div>
+
+    <!-- Timing Configuration -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="section-title">
+          <!-- SVG Icon -->
+          <svg class="section-icon" viewBox="0 0 24 24">
+            <path fill="currentColor"
+                  d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5 10l7 5
+                     7-5zM12 2l9 7-9 7-9-7 9-7z"/>
+          </svg>
+          Timing Configuration
+        </h2>
+      </div>
+
+      <form method="POST" action="{{ url_for('update_config') }}">
+        <div class="grid grid-2">
+          <div class="input-group">
+            <label>Long Press Threshold (seconds)</label>
+            <input type="number" name="LONG_PRESS_THRESHOLD"
+                   value="{{ c.LONG_PRESS_THRESHOLD }}"
+                   step="0.1" min="0.1" required>
+            <p class="input-description">Seconds to hold for long press (green to red)</p>
+          </div>
+
+          <div class="input-group">
+            <label>Short Flash Duration (seconds)</label>
+            <input type="number" name="SHORT_FLASH_DURATION"
+                   value="{{ c.SHORT_FLASH_DURATION }}"
+                   step="0.1" min="0.1" required>
+            <p class="input-description">How long to blink after button press</p>
+          </div>
+
+          <div class="input-group">
+            <label>Flash Interval (seconds)</label>
+            <input type="number" name="FLASH_INTERVAL"
+                   value="{{ c.FLASH_INTERVAL }}"
+                   step="0.1" min="0.1" required>
+            <p class="input-description">Time between blinks (lower = faster)</p>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-success">
+          Apply Timing Settings
+        </button>
+      </form>
+    </div>
+
+    <!-- LED Configuration -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="section-title">
+          <!-- SVG Icon -->
+          <svg class="section-icon" viewBox="0 0 24 24">
+            <path fill="currentColor"
+                  d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6
+                     6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4
+                     4-4 4 1.79 4 4-1.79 4-4 4z"/>
+          </svg>
+          LED Configuration
+        </h2>
+      </div>
+
+      <form method="POST" action="{{ url_for('update_config') }}">
+        <div class="grid grid-2">
+          <div class="input-group">
+            <label>Flash Brightness (0-255)</label>
+            <input type="number" name="FLASH_BRIGHTNESS" value="{{ c.FLASH_BRIGHTNESS }}"
+                   min="0" max="255" required>
+            <p class="input-description">LED brightness (0-255)</p>
+          </div>
+
+          <div class="input-group">
+            <label>Transition Time (seconds)</label>
+            <input type="number" name="TRANSITION_TIME"
+                   value="{{ c.TRANSITION_TIME }}"
+                   step="0.1" min="0" required>
+            <p class="input-description">Color fade duration in seconds</p>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-success">
+          Apply LED Settings
+        </button>
+      </form>
+    </div>
+
+    <!-- Connection Settings -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="section-title">
+          <!-- SVG Icon -->
+          <svg class="section-icon" viewBox="0 0 24 24">
+            <path fill="currentColor"
+                  d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5
+                     10l7 5 7-5z"/>
+          </svg>
+          Connection Settings
+        </h2>
+      </div>
+
+      <form method="POST" action="{{ url_for('update_config') }}">
+        <div class="grid grid-2">
+          <div class="input-group">
+            <label>Maximum Retries</label>
+            <input type="number" name="MAX_RETRIES" value="{{ c.MAX_RETRIES }}" min="1" required>
+          </div>
+
+          <div class="input-group">
+            <label>Retry Delay (seconds)</label>
+            <input type="number" name="RETRY_DELAY"
+                   value="{{ c.RETRY_DELAY }}"
+                   step="0.1" min="0.1" required>
+          </div>
+
+          <div class="input-group">
+            <label>Reconnection Delay (seconds)</label>
+            <input type="number" name="RECONNECT_DELAY"
+                   value="{{ c.RECONNECT_DELAY }}"
+                   step="0.1" min="0.1" required>
+          </div>
+
+          <div class="input-group">
+            <label>Request Timeout (seconds)</label>
+            <input type="number" name="REQUEST_TIMEOUT"
+                   value="{{ c.REQUEST_TIMEOUT }}"
+                   step="0.1" min="0.1" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-success">
+          Apply Connection Settings
+        </button>
+      </form>
+    </div>
+
+    <!-- System Status -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="section-title">
+          <!-- SVG Icon -->
+          <svg class="section-icon" viewBox="0 0 24 24">
+            <path fill="currentColor"
+                  d="M11 9h2V7h-2m1 13c-4.41 0-8-3.59-8-8s3.59-8
+                     8-8 8 3.59 8 8-3.59 8-8 8m0-18A10 10 0 0 0
+                     2 12a10 10 0 0 0 10 10 10 10 0 0 0
+                     10-10A10 10 0 0 0 12 2m1 15h-2v2h2v-2zm0-6h-2v4h2v-4z"/>
+          </svg>
+          System Status
+        </h2>
+      </div>
+      <div class="grid grid-2">
+        <div class="input-group">
+          <label>Log File Location</label>
+          <input type="text" value="{{ c.LOG_FILE }}" readonly>
+        </div>
+        <div class="input-group">
+          <label>Connection Status</label>
+          <div class="warning">
+            <svg width="16" height="16" viewBox="0 0 24 24">
+              <path fill="currentColor"
+                    d="M12 21l-7-5 7-5 7 5-7 5zm0-16L5
+                       10l7 5 7-5zM12 2l9 7-9 7-9-7 9-7z"/>
+            </svg>
+            Check log file for detailed status information
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>&copy; 2025 Bar-Blinker Control Panel. All rights reserved.</p>
+    </div>
+  </div>
 </body>
 </html>
