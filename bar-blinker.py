@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""
+A Flask-based Raspberry Pi WLED controller application
+with speed & intensity controls and NO CSRF checks.
+"""
 
 import configparser
 import os
@@ -9,37 +13,59 @@ import logging
 import logging.handlers
 import threading
 from threading import Lock
+import socket
 import RPi.GPIO as GPIO
 import requests
 from requests.auth import HTTPBasicAuth
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, jsonify
+from functools import wraps
+import hashlib
+from datetime import datetime
 
 # ======================
 # Configuration Class
 # ======================
 class Config:
+    """
+    Holds all configuration variables for the WLED controller application.
+    This class can load, validate, and write settings to an INI file.
+    """
+
     BUTTON_PIN = 18
-    WLED_IP = "192.168.6.12"
-    LONG_PRESS_THRESHOLD = 6.0  # Seconds to consider a press as long
-    SHORT_FLASH_DURATION = 30.0  # Duration for green flashing
-    FLASH_INTERVAL = 0.5  # Interval between flashes in seconds
+    WLED_IP = "192.168.1.15"
+    LONG_PRESS_THRESHOLD = 3.0
+    SHORT_FLASH_DURATION = 5.0
+    FLASH_INTERVAL = 0.5
     FLASH_BRIGHTNESS = 255
     LOG_FILE = os.path.expanduser("/home/tech/wled_button.log")
     MAX_RETRIES = 3
-    RETRY_DELAY = 1
-    RECONNECT_DELAY = 5
+    RETRY_DELAY = 1.0
+    RECONNECT_DELAY = 5.0
     TRANSITION_TIME = 0.0
-    REQUEST_TIMEOUT = 5
-    INI_FILE_PATH = "blinker-configs.ini"
+    REQUEST_TIMEOUT = 5.0
+    DEFAULT_MODE = "white"
+    DEFAULT_EFFECT_INDEX = 162
+    WLED_USERNAME = None
+    WLED_PASSWORD = None
 
-    # New Configuration Parameters
-    DEFAULT_MODE = "white"  # Options: "white", "effect"
-    DEFAULT_EFFECT_INDEX = 0  # Integer index of the effect
-    WLED_USERNAME = None  # Add your username if authentication is enabled
-    WLED_PASSWORD = None  # Add your password if authentication is enabled
+    # NEW: Speed & Intensity (0–255)
+    DEFAULT_EFFECT_SPEED = 128
+    DEFAULT_EFFECT_INTENSITY = 128
+
+    # Rate-limiting 
+    API_RATE_LIMIT = 100  # requests per minute
+    SESSION_TIMEOUT = 3600  # 1 hour
+
+    # Monitoring configurations
+    HEALTH_CHECK_INTERVAL = 60  # seconds
+    MAX_FAILED_ATTEMPTS = 5
 
     @classmethod
     def load_from_ini(cls, ini_path=None):
+        """
+        Loads configuration values from an INI file, if available.
+        Fallbacks to default class attributes for any missing or invalid fields.
+        """
         if ini_path:
             cls.INI_FILE_PATH = ini_path
 
@@ -76,22 +102,69 @@ class Config:
                 return default
             return val_str
 
-        cls.BUTTON_PIN = get_int("BUTTON_PIN", cls.BUTTON_PIN)
-        cls.WLED_IP = get_str("WLED_IP", cls.WLED_IP)
-        cls.LONG_PRESS_THRESHOLD = get_float("LONG_PRESS_THRESHOLD", cls.LONG_PRESS_THRESHOLD)
-        cls.SHORT_FLASH_DURATION = get_float("SHORT_FLASH_DURATION", cls.SHORT_FLASH_DURATION)
-        cls.FLASH_INTERVAL = get_float("FLASH_INTERVAL", cls.FLASH_INTERVAL)
-        cls.FLASH_BRIGHTNESS = get_int("FLASH_BRIGHTNESS", cls.FLASH_BRIGHTNESS)
-        cls.LOG_FILE = get_str("LOG_FILE", cls.LOG_FILE)
-        cls.MAX_RETRIES = get_int("MAX_RETRIES", cls.MAX_RETRIES)
-        cls.RETRY_DELAY = get_float("RETRY_DELAY", cls.RETRY_DELAY)
-        cls.RECONNECT_DELAY = get_float("RECONNECT_DELAY", cls.RECONNECT_DELAY)
-        cls.TRANSITION_TIME = get_float("TRANSITION_TIME", cls.TRANSITION_TIME)
-        cls.REQUEST_TIMEOUT = get_float("REQUEST_TIMEOUT", cls.REQUEST_TIMEOUT)
-        cls.DEFAULT_MODE = get_mode("DEFAULT_MODE", cls.DEFAULT_MODE)
-        cls.DEFAULT_EFFECT_INDEX = get_int("DEFAULT_EFFECT_INDEX", cls.DEFAULT_EFFECT_INDEX)
-        cls.WLED_USERNAME = parser.get(section, "WLED_USERNAME", fallback=None)
-        cls.WLED_PASSWORD = parser.get(section, "WLED_PASSWORD", fallback=None)
+        # Load all configurations
+        for attr in dir(cls):
+            if not attr.startswith('_') and not callable(getattr(cls, attr)):
+                value = getattr(cls, attr)
+                if isinstance(value, bool):
+                    setattr(cls, attr, parser.getboolean(section, attr, fallback=value))
+                elif isinstance(value, int):
+                    setattr(cls, attr, get_int(attr, value))
+                elif isinstance(value, float):
+                    setattr(cls, attr, get_float(attr, value))
+                elif isinstance(value, str):
+                    setattr(cls, attr, get_str(attr, value))
+
+    @classmethod
+    def validate(cls):
+        """
+        Validates that all configuration values are within acceptable ranges
+        and the WLED_IP is a valid IP address.
+        """
+        try:
+            # Enhanced IP validation
+            try:
+                socket.inet_aton(cls.WLED_IP)
+            except socket.error:
+                raise ValueError(f"Invalid IP address: {cls.WLED_IP}")
+
+            # Validate numeric ranges
+            if not (0 <= cls.FLASH_BRIGHTNESS <= 255):
+                raise ValueError("Flash brightness must be between 0 and 255")
+            
+            if not (0 <= cls.BUTTON_PIN <= 27):
+                raise ValueError("Invalid GPIO pin number")
+            
+            if cls.SHORT_FLASH_DURATION <= 0:
+                raise ValueError("Short flash duration must be positive")
+            
+            if cls.FLASH_INTERVAL <= 0:
+                raise ValueError("Flash interval must be positive")
+            
+            if cls.LONG_PRESS_THRESHOLD <= 0:
+                raise ValueError("Long press threshold must be positive")
+            
+            if cls.DEFAULT_MODE not in ["white", "effect"]:
+                raise ValueError("Invalid default mode")
+            
+            if not (0 <= cls.DEFAULT_EFFECT_INDEX <= 200):
+                raise ValueError("Invalid effect index")
+
+            # NEW checks: speed & intensity
+            if not (0 <= cls.DEFAULT_EFFECT_SPEED <= 255):
+                raise ValueError("Effect speed must be between 0 and 255")
+            if not (0 <= cls.DEFAULT_EFFECT_INTENSITY <= 255):
+                raise ValueError("Effect intensity must be between 0 and 255")
+
+            # Validate file paths
+            log_dir = os.path.dirname(cls.LOG_FILE)
+            if log_dir and not os.access(log_dir, os.W_OK):
+                raise ValueError(f"Log directory not writable: {log_dir}")
+
+            return True
+        except Exception as e:
+            logging.error(f"Configuration validation failed: {e}")
+            return False
 
     @classmethod
     def write_to_ini(cls):
@@ -99,44 +172,65 @@ class Config:
         section = "BLINKER"
         parser.add_section(section)
 
-        def set_str(key, value):
-            parser.set(section, key, str(value))
+        # Write all non-private, non-callable attributes
+        for attr in dir(cls):
+            if not attr.startswith('_') and not callable(getattr(cls, attr)):
+                value = getattr(cls, attr)
+                if value is not None:
+                    parser.set(section, attr, str(value))
 
-        set_str("BUTTON_PIN", cls.BUTTON_PIN)
-        set_str("WLED_IP", cls.WLED_IP)
-        set_str("LONG_PRESS_THRESHOLD", cls.LONG_PRESS_THRESHOLD)
-        set_str("SHORT_FLASH_DURATION", cls.SHORT_FLASH_DURATION)
-        set_str("FLASH_INTERVAL", cls.FLASH_INTERVAL)
-        set_str("FLASH_BRIGHTNESS", cls.FLASH_BRIGHTNESS)
-        set_str("LOG_FILE", cls.LOG_FILE)
-        set_str("MAX_RETRIES", cls.MAX_RETRIES)
-        set_str("RETRY_DELAY", cls.RETRY_DELAY)
-        set_str("RECONNECT_DELAY", cls.RECONNECT_DELAY)
-        set_str("TRANSITION_TIME", cls.TRANSITION_TIME)
-        set_str("REQUEST_TIMEOUT", cls.REQUEST_TIMEOUT)
-        set_str("DEFAULT_MODE", cls.DEFAULT_MODE)
-        set_str("DEFAULT_EFFECT_INDEX", cls.DEFAULT_EFFECT_INDEX)
-        set_str("WLED_USERNAME", cls.WLED_USERNAME if cls.WLED_USERNAME else "")
-        set_str("WLED_PASSWORD", cls.WLED_PASSWORD if cls.WLED_PASSWORD else "")
-
-        with open(cls.INI_FILE_PATH, "w") as config_file:
-            parser.write(config_file)
-
-    @classmethod
-    def validate(cls):
         try:
-            ipaddress.ip_address(cls.WLED_IP)
-            assert 0 <= cls.FLASH_BRIGHTNESS <= 255
-            assert cls.SHORT_FLASH_DURATION > 0
-            assert cls.FLASH_INTERVAL > 0
-            assert cls.LONG_PRESS_THRESHOLD > 0
-            assert 0 <= cls.BUTTON_PIN <= 27
-            assert cls.DEFAULT_MODE in ["white", "effect"]
-            assert 0 <= cls.DEFAULT_EFFECT_INDEX <= 200  # Assuming WLED supports a reasonable number of effects
-            return True
+            with open(cls.INI_FILE_PATH, "w") as config_file:
+                parser.write(config_file)
         except Exception as e:
-            logging.error(f"Configuration validation failed: {e}")
-            return False
+            logging.error(f"Failed to write configuration: {e}")
+            raise
+
+
+# ======================
+# System Health Monitoring
+# ======================
+class SystemHealth:
+    def __init__(self):
+        self.last_successful_connection = None
+        self.failed_attempts = 0
+        self.button_press_count = 0
+        self.last_error = None
+        self.status = "initializing"
+        self._lock = threading.Lock()
+
+    def record_success(self):
+        with self._lock:
+            self.last_successful_connection = datetime.now()
+            self.failed_attempts = 0
+            self.status = "healthy"
+            self.last_error = None
+
+    def record_failure(self, error):
+        with self._lock:
+            self.failed_attempts += 1
+            self.last_error = str(error)
+            if self.failed_attempts >= Config.MAX_FAILED_ATTEMPTS:
+                self.status = "critical"
+            else:
+                self.status = "degraded"
+
+    def record_button_press(self):
+        with self._lock:
+            self.button_press_count += 1
+
+    def get_status(self):
+        with self._lock:
+            return {
+                "status": self.status,
+                "last_successful_connection": (
+                    self.last_successful_connection.isoformat() if self.last_successful_connection else None
+                ),
+                "failed_attempts": self.failed_attempts,
+                "button_press_count": self.button_press_count,
+                "last_error": self.last_error
+            }
+
 
 # ======================
 # Logging Setup Function
@@ -147,33 +241,46 @@ def setup_logging():
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
 
-        handler = logging.handlers.RotatingFileHandler(
+        # Create rotating file handler
+        file_handler = logging.handlers.RotatingFileHandler(
             Config.LOG_FILE,
-            maxBytes=1024 * 1024,
+            maxBytes=1024 * 1024,  # 1MB
             backupCount=5
         )
+        
+        # Create console handler
+        console_handler = logging.StreamHandler()
+        
+        # Create formatter
         formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s',
+            '%(asctime)s - %(levelname)s - [%(threadName)s] - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        handler.setFormatter(formatter)
-
-        logger = logging.getLogger()
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-
-        console_handler = logging.StreamHandler()
+        
+        # Set formatter for both handlers
+        file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
+        
+        # Get root logger and set level
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        # Remove existing handlers
+        logger.handlers = []
+        
+        # Add handlers
+        logger.addHandler(file_handler)
         logger.addHandler(console_handler)
-
+        
         return logger
     except Exception as e:
+        print(f"Failed to setup logging: {e}")
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
-        logging.error(f"Logging setup failed: {e}")
         return logging.getLogger()
+
 
 # ======================
 # WLED Controller Class
@@ -192,6 +299,10 @@ class WLEDController:
         self._flash_lock = Lock()
         self._flashing = False
         self._session = requests.Session()
+        self._effects_cache = None
+        self._effects_cache_time = None
+        self._effects_cache_duration = 300  # 5 minutes
+        self.system_health = SystemHealth()
 
         if self.username and self.password:
             self._session.auth = HTTPBasicAuth(self.username, self.password)
@@ -209,11 +320,11 @@ class WLEDController:
     def initialize(self):
         info = self.get_info()
         if info:
-            # WLED API returns LED count directly in the info response
             self.led_count = info.get('leds', {}).get('count', 0)
             self.name = info.get('name', 'Unknown')
             self.version = info.get('ver', 'Unknown')
             self.is_connected = True
+            self.system_health.record_success()
             logging.info(f"Connected to {self.name} with {self.led_count} LEDs")
             return True
         self.is_connected = False
@@ -224,12 +335,78 @@ class WLEDController:
             url = f"http://{self.ip_address}/json/info"
             response = self._session.get(url, timeout=Config.REQUEST_TIMEOUT)
             if response.status_code == 200:
-                return response.json()
-            logging.error(f"Failed to get WLED info: HTTP {response.status_code}")
-            return None
+                json_data = response.json()
+                self.system_health.record_success()
+                return json_data
+            else:
+                logging.error(f"Failed to get WLED info: HTTP {response.status_code}")
+                self.system_health.record_failure(f"HTTP {response.status_code}")
+                return None
         except requests.exceptions.RequestException as e:
             logging.error(f"Failed to get WLED info: {e}")
+            self.system_health.record_failure(str(e))
             return None
+        except ValueError as e:
+            logging.error(f"Invalid JSON response from WLED info: {e}")
+            self.system_health.record_failure(str(e))
+            return None
+
+    def apply_effect(self, effect_index):
+        """
+        Applies an effect by index, using default brightness,
+        speed, and intensity from Config.
+        """
+        try:
+            url = f"http://{self.ip_address}/json/state"
+            payload = {
+                "on": True,
+                "bri": Config.FLASH_BRIGHTNESS,
+                "transition": int(Config.TRANSITION_TIME * 1000),
+                "seg": [{
+                    "id": 0,
+                    "fx": effect_index,
+                    "sx": Config.DEFAULT_EFFECT_SPEED,
+                    "ix": Config.DEFAULT_EFFECT_INTENSITY
+                }]
+            }
+            logging.debug(f"Applying effect {effect_index} with payload: {payload}")
+            response = self._session.post(url, json=payload, timeout=Config.REQUEST_TIMEOUT)
+            
+            if response.status_code == 200:
+                logging.info(f"Applied effect {effect_index} (speed={Config.DEFAULT_EFFECT_SPEED}, intensity={Config.DEFAULT_EFFECT_INTENSITY}).")
+                self.system_health.record_success()
+                return True
+            else:
+                logging.error(f"Failed to apply effect {effect_index}: HTTP {response.status_code}")
+                self.system_health.record_failure(f"HTTP {response.status_code}")
+                return False
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Failed to apply effect {effect_index}: {e}")
+            self.system_health.record_failure(str(e))
+            self.is_connected = False
+            return False
+
+    def auto_recover(self):
+        if not self.is_connected:
+            logging.info("Attempting auto-recovery of WLED connection...")
+            if self.wait_for_connection():
+                logging.info("Successfully reconnected to WLED")
+                if self.restore_last_state():
+                    logging.info("Successfully restored last state")
+                    return True
+                else:
+                    logging.warning("Failed to restore last state after reconnection")
+            else:
+                logging.error("Failed to reconnect to WLED during auto-recovery")
+        return False
+
+    def get_health_status(self):
+        return self.system_health.get_status()
+
+    def cleanup(self):
+        self.stop_flashing()
+        self._session.close()
+        logging.info("WLED controller cleanup completed")
 
     def wait_for_connection(self):
         attempt = 1
@@ -269,10 +446,13 @@ class WLEDController:
                 if resp.status_code == 200:
                     with self._state_lock:
                         self._last_state = state
+                    self.system_health.record_success()
                     return True
                 logging.warning(f"Failed to set WLED state (Attempt {attempt+1}): HTTP {resp.status_code}")
+                self.system_health.record_failure(f"HTTP {resp.status_code}")
             except requests.exceptions.RequestException as e:
                 logging.warning(f"Request error: {e}")
+                self.system_health.record_failure(str(e))
                 self.is_connected = False
 
             if attempt < Config.MAX_RETRIES - 1:
@@ -290,75 +470,51 @@ class WLEDController:
         return False
 
     def set_white(self):
-        """
-        Sets the LEDs to white.
-        """
         logging.info("Setting LEDs to white.")
         return self.set_color(255, 255, 255, Config.FLASH_BRIGHTNESS)
 
     def get_effects(self):
-        """
-        Retrieves the list of available effects from WLED.
-        Returns a list of effect names.
-        """
+        current_time = time.time()
+        
+        # Return cached effects if still valid
+        if (self._effects_cache is not None and 
+            self._effects_cache_time is not None and 
+            current_time - self._effects_cache_time < self._effects_cache_duration):
+            return self._effects_cache
+
         try:
             url = f"http://{self.ip_address}/json"
             logging.debug(f"Fetching effects from {url}")
             response = self._session.get(url, timeout=Config.REQUEST_TIMEOUT)
-            logging.debug(f"Received response: {response.status_code} - {response.text}")
-
+            
             if response.status_code == 200:
                 json_data = response.json()
-                # Effects are in the 'effects' array of the main JSON response
                 effects = json_data.get('effects', [])
                 logging.info(f"Retrieved {len(effects)} effects from WLED")
+
+                # Update cache
+                self._effects_cache = effects
+                self._effects_cache_time = current_time
+                self.system_health.record_success()
                 return effects
             else:
                 logging.error(f"Failed to get WLED effects: HTTP {response.status_code}")
-                return []
+                self.system_health.record_failure(f"HTTP {response.status_code}")
+                return self._effects_cache if self._effects_cache else []
         except requests.exceptions.RequestException as e:
             logging.error(f"Failed to get WLED effects: {e}")
-            return []
+            self.system_health.record_failure(str(e))
+            return self._effects_cache if self._effects_cache else []
         except ValueError as e:
             logging.error(f"Invalid JSON response from WLED effects: {e}")
-            return []
+            self.system_health.record_failure(str(e))
+            return self._effects_cache if self._effects_cache else []
 
-    def apply_effect(self, effect_index):
-        """
-        Applies an effect by its index from the fxList.
-        """
-        try:
-            url = f"http://{self.ip_address}/json/state"
-            payload = {
-                "seg": [{
-                    "fx": effect_index
-                }]
-            }
-            logging.debug(f"Applying effect {effect_index} with payload: {payload}")
-            response = self._session.post(url, json=payload, timeout=Config.REQUEST_TIMEOUT)
-            if response.status_code == 200:
-                logging.info(f"Applied effect {effect_index}.")
-                return True
-            else:
-                logging.error(f"Failed to apply effect {effect_index}: HTTP {response.status_code}")
-                return False
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to apply effect {effect_index}: {e}")
-            self.is_connected = False
-            return False
-
-    def cleanup(self):
-        self.stop_flashing()
-        self._session.close()
 
 # =================================
 # Helper: Revert to user-selected default
 # =================================
 def revert_to_user_default(wled: 'WLEDController'):
-    """
-    Reverts WLED to the user-selected default mode:
-    either white or the chosen effect index.
-    """
     logging.info("Reverting to user default...")
     if Config.DEFAULT_MODE == "white":
         wled.set_white()
@@ -366,12 +522,9 @@ def revert_to_user_default(wled: 'WLEDController'):
         wled.apply_effect(Config.DEFAULT_EFFECT_INDEX)
 
 # ======================
-# Function to Blink Red Alert
+# Blink Red Alert
 # ======================
 def blink_red_alert(wled: 'WLEDController'):
-    """
-    Function to handle red alert blinking after a long press was initiated but not completed.
-    """
     logging.info("Issuing red alert due to incomplete long press.")
     start_time = time.time()
     flash_state = True
@@ -381,12 +534,15 @@ def blink_red_alert(wled: 'WLEDController'):
         while (time.time() - start_time < Config.SHORT_FLASH_DURATION) and wled.flashing:
             interval = Config.FLASH_INTERVAL / 2
             if flash_state:
-                wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS)
+                if not wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS):
+                    logging.error("Failed to set red color during alert")
+                    wled.auto_recover()
             else:
-                wled.set_color(0, 0, 0, 0)
+                if not wled.set_color(0, 0, 0, 0):
+                    logging.error("Failed to set off state during alert")
+                    wled.auto_recover()
             flash_state = not flash_state
             time.sleep(interval)
-        # Instead of forcing white, revert to default
         revert_to_user_default(wled)
     except Exception as e:
         logging.error(f"Error during red alert blinking: {e}")
@@ -395,16 +551,13 @@ def blink_red_alert(wled: 'WLEDController'):
         wled.flashing = False
 
 # ======================
-# Function to Blink Green for Short Press
+# Blink Green (Short Press)
 # ======================
 def blink_green_for_30s(wled: 'WLEDController'):
-    """
-    Blinks green LEDs for SHORT_FLASH_DURATION seconds.
-    If a long press is detected during this period, switches to blinking red.
-    """
     import RPi.GPIO as GPIO
 
-    logging.info("Short press => blink 'green' for up to SHORT_FLASH_DURATION seconds")
+    logging.info("Short press => blink 'blue' for up to SHORT_FLASH_DURATION seconds")
+    wled.system_health.record_button_press()
 
     start_time = time.time()
     flash_state = True
@@ -412,7 +565,7 @@ def blink_green_for_30s(wled: 'WLEDController'):
 
     press_start_time = None
     long_press_active = False
-    long_press_initiated = False  # Flag to track long press initiation
+    long_press_initiated = False
 
     try:
         while (time.time() - start_time < Config.SHORT_FLASH_DURATION) and wled.flashing:
@@ -421,37 +574,39 @@ def blink_green_for_30s(wled: 'WLEDController'):
                 if press_start_time is None:
                     press_start_time = time.time()
                 elif (time.time() - press_start_time) >= Config.LONG_PRESS_THRESHOLD and not long_press_active:
-                    logging.info("Long press detected during green => switching to red immediately")
+                    logging.info("Long press detected during blue => switching to red immediately")
                     long_press_active = True
-                    long_press_initiated = True  # Set the flag
+                    long_press_initiated = True
                     while GPIO.input(Config.BUTTON_PIN) == 0 and wled.flashing:
                         interval = Config.FLASH_INTERVAL / 2
                         if flash_state:
-                            wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS)
+                            if not wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS):
+                                wled.auto_recover()
                         else:
-                            wled.set_color(0, 0, 0, 0)
+                            if not wled.set_color(0, 0, 0, 0):
+                                wled.auto_recover()
                         flash_state = not flash_state
                         time.sleep(interval)
-                    # Revert to default
                     revert_to_user_default(wled)
                     return
             else:
                 press_start_time = None
 
-            # Flash green
+            # Flash blue
             interval = Config.FLASH_INTERVAL / 2
             if flash_state:
-                wled.set_color(0, 0, 255, Config.FLASH_BRIGHTNESS)
+                if not wled.set_color(0, 0, 255, Config.FLASH_BRIGHTNESS):
+                    wled.auto_recover()
             else:
-                wled.set_color(0, 0, 0, 0)
+                if not wled.set_color(0, 0, 0, 0):
+                    wled.auto_recover()
             flash_state = not flash_state
             time.sleep(interval)
 
-        # After green flashing duration, revert to default
         revert_to_user_default(wled)
 
         if long_press_initiated:
-            logging.info("Long press was initiated during green flashing but not completed. Triggering red alert.")
+            logging.info("Long press was initiated during blue flashing but not completed. Triggering red alert.")
             blink_red_alert(wled)
 
     except Exception as e:
@@ -461,26 +616,21 @@ def blink_green_for_30s(wled: 'WLEDController'):
         wled.flashing = False
 
 # ======================
-# Function to Simulate Short Press via Web UI
+# Simulate Short Press
 # ======================
 def simulate_short_press(wled: 'WLEDController'):
-    """
-    Simulates a short button press, triggering green flashing.
-    """
     logging.info("Simulating short press from web UI.")
     wled.stop_flashing()
     blink_green_for_30s(wled)
 
 # ======================
-# Function to Simulate Long Press via Web UI
+# Simulate Long Press
 # ======================
 def simulate_long_press(wled: 'WLEDController'):
-    """
-    Simulates a long button press, triggering red blinking.
-    """
-    logging.info("Simulating long press from web UI.")
-
     import RPi.GPIO as GPIO
+    logging.info("Simulating long press from web UI.")
+    wled.system_health.record_button_press()
+
     wled.stop_flashing()
 
     hold_start = time.time()
@@ -496,7 +646,6 @@ def simulate_long_press(wled: 'WLEDController'):
 
             if (time.time() - hold_start) >= threshold:
                 blinking_red = False
-                # Instead of going white, revert to default
                 revert_to_user_default(wled)
                 logging.info("Simulated long press release => reverting to default")
                 break
@@ -504,9 +653,11 @@ def simulate_long_press(wled: 'WLEDController'):
             now = time.time()
             if (now - last_blink_time) >= interval:
                 if blink_state:
-                    wled.set_color(0, 0, 0, 0)
+                    if not wled.set_color(0, 0, 0, 0):
+                        wled.auto_recover()
                 else:
-                    wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS)
+                    if not wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS):
+                        wled.auto_recover()
                 blink_state = not blink_state
                 last_blink_time = now
 
@@ -518,12 +669,9 @@ def simulate_long_press(wled: 'WLEDController'):
         wled.flashing = False
 
 # ======================
-# Hardware Button Loop Function
+# Hardware Button Loop
 # ======================
 def hardware_button_loop(wled: 'WLEDController', stop_event: threading.Event):
-    """
-    Monitors the hardware button for short and long presses.
-    """
     import RPi.GPIO as GPIO
 
     GPIO.setmode(GPIO.BCM)
@@ -544,8 +692,12 @@ def hardware_button_loop(wled: 'WLEDController', stop_event: threading.Event):
     while not stop_event.is_set():
         if not wled.is_connected:
             logging.warning("Lost connection to WLED; attempting reconnect from hardware loop...")
-            wled.wait_for_connection()
-            wled.restore_last_state()
+            if wled.auto_recover():
+                logging.info("Successfully recovered WLED connection")
+            else:
+                logging.error("Failed to recover WLED connection")
+                time.sleep(Config.RECONNECT_DELAY)
+                continue
 
         current_state = GPIO.input(Config.BUTTON_PIN)
 
@@ -585,9 +737,11 @@ def hardware_button_loop(wled: 'WLEDController', stop_event: threading.Event):
                     now = time.time()
                     if (now - last_blink_time) >= interval:
                         if blink_state:
-                            wled.set_color(0, 0, 0, 0)
+                            if not wled.set_color(0, 0, 0, 0):
+                                wled.auto_recover()
                         else:
-                            wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS)
+                            if not wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS):
+                                wled.auto_recover()
                         blink_state = not blink_state
                         last_blink_time = now
 
@@ -597,76 +751,148 @@ def hardware_button_loop(wled: 'WLEDController', stop_event: threading.Event):
     logging.info("Hardware button loop exiting...")
 
 # ======================
-# Flask Web Application Setup
+# Rate Limit Decorator
+# ======================
+def rate_limit(f):
+    """
+    Limits each IP to Config.API_RATE_LIMIT requests per minute.
+    """
+    requests_per_ip = {}
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        now = time.time()
+        ip = request.remote_addr
+        
+        # Clean old requests older than 60 seconds
+        for k, v in list(requests_per_ip.items()):
+            requests_per_ip[k] = [ts for ts in v if ts > now - 60]
+        
+        if ip not in requests_per_ip:
+            requests_per_ip[ip] = []
+        if len(requests_per_ip[ip]) >= Config.API_RATE_LIMIT:
+            return jsonify({"error": "Rate limit exceeded"}), 429
+        
+        requests_per_ip[ip].append(now)
+        return f(*args, **kwargs)
+    return decorated
+
+# ======================
+# Flask Setup (No CSRF)
 # ======================
 app = Flask(__name__)
 stop_event = threading.Event()
 wled = None  # Will be initialized in main()
 
+# NO before_request for CSRF, no CSRF decorator
+
 @app.route("/")
+@rate_limit
 def index():
     if not wled.is_connected:
         logging.warning("WLED not connected. Effects will not be available.")
         effects = []
     else:
         effects = wled.get_effects()
+    
     current_effect = Config.DEFAULT_EFFECT_INDEX if Config.DEFAULT_MODE == "effect" else None
     current_mode = Config.DEFAULT_MODE
-    logging.info(f"Rendering index.html with mode={current_mode}, effect_index={current_effect}, effects={effects}")
-    return render_template("index.html",
-                           c=Config,
-                           effects=effects,
-                           current_mode=current_mode,
-                           current_effect=current_effect)
+    health_status = wled.get_health_status()
+    
+    logging.info(f"Rendering index with mode={current_mode}, effect_index={current_effect}")
+    
+    return render_template(
+        "index.html",
+        c=Config,
+        effects=effects,
+        current_mode=current_mode,
+        current_effect=current_effect,
+        health_status=health_status
+    )
 
 @app.route("/update_config", methods=["POST"])
+@rate_limit
 def update_config():
-    form = request.form
+    """
+    Update WLED configuration settings from a form (no CSRF).
+    Includes effect speed/intensity, IP address, brightness, etc.
+    """
+    try:
+        form = request.form
 
-    # Update existing Config parameters
-    Config.WLED_IP = form.get("WLED_IP", Config.WLED_IP)
-    Config.LONG_PRESS_THRESHOLD = float(form.get("LONG_PRESS_THRESHOLD", Config.LONG_PRESS_THRESHOLD))
-    Config.SHORT_FLASH_DURATION = float(form.get("SHORT_FLASH_DURATION", Config.SHORT_FLASH_DURATION))
-    Config.FLASH_INTERVAL = float(form.get("FLASH_INTERVAL", Config.FLASH_INTERVAL))
-    Config.FLASH_BRIGHTNESS = int(form.get("FLASH_BRIGHTNESS", Config.FLASH_BRIGHTNESS))
-    Config.LOG_FILE = form.get("LOG_FILE", Config.LOG_FILE)
-    Config.MAX_RETRIES = int(form.get("MAX_RETRIES", Config.MAX_RETRIES))
-    Config.RETRY_DELAY = float(form.get("RETRY_DELAY", Config.RETRY_DELAY))
-    Config.RECONNECT_DELAY = float(form.get("RECONNECT_DELAY", Config.RECONNECT_DELAY))
-    Config.TRANSITION_TIME = float(form.get("TRANSITION_TIME", Config.TRANSITION_TIME))
-    Config.REQUEST_TIMEOUT = float(form.get("REQUEST_TIMEOUT", Config.REQUEST_TIMEOUT))
-    Config.WLED_USERNAME = form.get("WLED_USERNAME", Config.WLED_USERNAME)
-    Config.WLED_PASSWORD = form.get("WLED_PASSWORD", Config.WLED_PASSWORD)
-
-    # Update Mode and Effect Selection
-    selected_mode = form.get("mode", Config.DEFAULT_MODE)
-    if selected_mode not in ["white", "effect"]:
-        logging.warning(f"Invalid mode selected: {selected_mode}. Reverting to default.")
-        selected_mode = "white"
-    Config.DEFAULT_MODE = selected_mode
-
-    if selected_mode == "effect":
+        # Validate IP address
+        new_ip = form.get("WLED_IP", Config.WLED_IP)
         try:
-            effect_index = int(form.get("effect_index", Config.DEFAULT_EFFECT_INDEX))
-            Config.DEFAULT_EFFECT_INDEX = effect_index
-        except ValueError:
-            logging.warning(f"Invalid effect index format. Reverting to default.")
-            effect_index = Config.DEFAULT_EFFECT_INDEX
-    else:
-        effect_index = None  # No effect selected
+            socket.inet_aton(new_ip)
+            Config.WLED_IP = new_ip
+        except socket.error:
+            return jsonify({"error": "Invalid IP address"}), 400
 
-    Config.write_to_ini()
-    logging.info("Updated config from web UI. New settings apply immediately in blinking logic.")
+        def update_numeric(key, min_val=None, max_val=None, is_int=False):
+            if key in form:
+                try:
+                    val = int(form[key]) if is_int else float(form[key])
+                    if (min_val is not None and val < min_val) or \
+                       (max_val is not None and val > max_val):
+                        raise ValueError
+                    setattr(Config, key, val)
+                except ValueError:
+                    return False
+            return True
 
-    # Apply the selected mode immediately
-    if selected_mode == "white":
-        wled.set_white()
-    elif selected_mode == "effect" and effect_index is not None:
-        wled.apply_effect(effect_index)
+        # Update numeric fields
+        validations = [
+            update_numeric("LONG_PRESS_THRESHOLD", min_val=0.1),
+            update_numeric("SHORT_FLASH_DURATION", min_val=0.1),
+            update_numeric("FLASH_INTERVAL", min_val=0.1),
+            update_numeric("FLASH_BRIGHTNESS", min_val=0, max_val=255, is_int=True),
+            update_numeric("MAX_RETRIES", min_val=1, is_int=True),
+            update_numeric("RETRY_DELAY", min_val=0.1),
+            update_numeric("RECONNECT_DELAY", min_val=0.1),
+            update_numeric("TRANSITION_TIME", min_val=0),
+            update_numeric("REQUEST_TIMEOUT", min_val=0.1),
+            update_numeric("DEFAULT_EFFECT_SPEED", min_val=0, max_val=255, is_int=True),
+            update_numeric("DEFAULT_EFFECT_INTENSITY", min_val=0, max_val=255, is_int=True)
+        ]
 
-    return redirect(url_for("index"))
+        if not all(validations):
+            return jsonify({"error": "Invalid numeric parameters"}), 400
+
+        # Update string fields
+        Config.LOG_FILE = form.get("LOG_FILE", Config.LOG_FILE)
+        Config.WLED_USERNAME = form.get("WLED_USERNAME", Config.WLED_USERNAME)
+        Config.WLED_PASSWORD = form.get("WLED_PASSWORD", Config.WLED_PASSWORD)
+
+        # Update Mode and Effect Selection
+        selected_mode = form.get("mode", Config.DEFAULT_MODE)
+        if selected_mode not in ["white", "effect"]:
+            return jsonify({"error": "Invalid mode selected"}), 400
+        Config.DEFAULT_MODE = selected_mode
+
+        if selected_mode == "effect":
+            try:
+                effect_index = int(form.get("effect_index", Config.DEFAULT_EFFECT_INDEX))
+                Config.DEFAULT_EFFECT_INDEX = effect_index
+            except ValueError:
+                return jsonify({"error": "Invalid effect index"}), 400
+
+        # Write to INI
+        Config.write_to_ini()
+        logging.info("Updated configuration from web UI")
+
+        # Apply the selected mode immediately
+        if selected_mode == "white":
+            wled.set_white()
+        elif selected_mode == "effect":
+            wled.apply_effect(Config.DEFAULT_EFFECT_INDEX)
+
+        return redirect(url_for("index"))
+    except Exception as e:
+        logging.error(f"Error updating configuration: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/simulate_press", methods=["POST"])
+@rate_limit
 def simulate_press():
     press_type = request.form.get("press_type")
     if press_type == "short":
@@ -675,73 +901,80 @@ def simulate_press():
         simulate_long_press(wled)
     else:
         logging.warning(f"Unknown press type: {press_type}")
+        return jsonify({"error": "Invalid press type"}), 400
     return redirect(url_for("index"))
 
-# ======================
-# Background Connection Thread Function
-# ======================
+@app.route("/health", methods=["GET"])
+@rate_limit
+def health_check():
+    return jsonify(wled.get_health_status())
+
+# Background connection thread
 def background_connect_wled(wled: 'WLEDController', stop_event: threading.Event):
-    """
-    Continuously attempts to connect to WLED in the background.
-    """
     try:
-        while not wled.is_connected and not stop_event.is_set():
-            wled.wait_for_connection()
+        while not stop_event.is_set():
+            if not wled.is_connected:
+                wled.wait_for_connection()
+            time.sleep(Config.HEALTH_CHECK_INTERVAL)
     except Exception as e:
         logging.error(f"Error in background_connect_wled: {e}")
 
-# ======================
-# Main Function
-# ======================
 def main():
-    Config.load_from_ini("blinker-configs.ini")
-    setup_logging()
-    if not Config.validate():
-        logging.error("Invalid configuration; exiting.")
-        return
+    try:
+        # Load and validate configuration
+        Config.load_from_ini("blinker-configs.ini")
+        setup_logging()
+        if not Config.validate():
+            logging.error("Invalid configuration; exiting.")
+            return
 
-    logging.info("Starting WLED Button Flask Application...")
+        logging.info("Starting WLED Button Flask Application...")
 
-    global wled
-    wled = WLEDController(
-        Config.WLED_IP,
-        username=getattr(Config, 'WLED_USERNAME', None),
-        password=getattr(Config, 'WLED_PASSWORD', None)
-    )
+        # Initialize WLED controller
+        global wled
+        wled = WLEDController(
+            Config.WLED_IP,
+            username=Config.WLED_USERNAME,
+            password=Config.WLED_PASSWORD
+        )
 
-    global stop_event
-    connect_thread = threading.Thread(
-        target=background_connect_wled,
-        args=(wled, stop_event),
-        daemon=True
-    )
-    connect_thread.start()
+        # Start background threads
+        global stop_event
+        connect_thread = threading.Thread(
+            target=background_connect_wled,
+            args=(wled, stop_event),
+            daemon=True
+        )
+        connect_thread.start()
 
-    hardware_thread = threading.Thread(
-        target=hardware_button_loop,
-        args=(wled, stop_event),
-        daemon=True
-    )
-    hardware_thread.start()
+        hardware_thread = threading.Thread(
+            target=hardware_button_loop,
+            args=(wled, stop_event),
+            daemon=True
+        )
+        hardware_thread.start()
 
-    # Apply the initial mode based on configuration
-    if Config.DEFAULT_MODE == "white":
-        wled.set_white()
-    elif Config.DEFAULT_MODE == "effect":
-        wled.apply_effect(Config.DEFAULT_EFFECT_INDEX)
+        # Apply initial mode
+        if Config.DEFAULT_MODE == "white":
+            wled.set_white()
+        elif Config.DEFAULT_MODE == "effect":
+            wled.apply_effect(Config.DEFAULT_EFFECT_INDEX)
 
-    # Start Flask app
-    app.run(host="0.0.0.0", port=5000, debug=False)
+        # Start Flask app
+        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
 
-    # Cleanup after Flask app stops
-    stop_event.set()
-    hardware_thread.join()
-    connect_thread.join()
-    wled.cleanup()
+    except Exception as e:
+        logging.error(f"Error in main: {e}")
+    finally:
+        stop_event.set()
+        if 'connect_thread' in locals():
+            connect_thread.join()
+        if 'hardware_thread' in locals():
+            hardware_thread.join()
+        if 'wled' in globals() and wled is not None:
+            wled.cleanup()
 
-# ======================
-# Entry Point
-# ======================
 if __name__ == "__main__":
+    stop_event = threading.Event()
     main()
 
