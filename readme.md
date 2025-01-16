@@ -3,7 +3,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
 [![WLED Compatible](https://img.shields.io/badge/WLED-Compatible-brightgreen.svg)](https://github.com/Aircoookie/WLED)
-[![GitHub release](https://img.shields.io/github/release/your-username/your-repo.svg)](https://github.com/your-username/your-repo/releases)
 
 A Python-based controller for WLED LED strips using Raspberry Pi GPIO input and a web-based configuration interface. The system monitors contact closure events through a GPIO pin to control LED strip states via the WLED API.
 
