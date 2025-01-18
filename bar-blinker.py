@@ -3,7 +3,8 @@
 A Flask-based Raspberry Pi WLED controller application with hardware button support.
 
 Features:
-    - Short press: Blinks "blue" (we often refer to it as "green" in the code doc, but the actual color is blue: (0,0,255)) for up to Config.SHORT_FLASH_DURATION seconds.
+    - Short press: Blinks "blue" (we often refer to it as "green" in the code doc, but the actual color is blue: (0,0,255))
+      for up to Config.SHORT_FLASH_DURATION seconds (now toggles between blue and white).
     - Long press: Blinks red (255,0,0) until the long press is released, then reverts to the user's default mode.
     - A long press can override an ongoing short press blink sequence (blue).
     - At the end of any blinking sequence (short or long), WLED reverts to the user-selected default mode (white or specified effect).
@@ -33,6 +34,7 @@ from flask import Flask, request, render_template, redirect, url_for, jsonify
 from functools import wraps
 import hashlib
 from datetime import datetime
+
 
 # ======================
 # Configuration Class
@@ -187,7 +189,7 @@ class Config:
             if not (0 <= cls.DEFAULT_EFFECT_INDEX <= 200):
                 raise ValueError("Invalid effect index")
 
-            # NEW checks: speed & intensity
+            # Validate speed & intensity
             if not (0 <= cls.DEFAULT_EFFECT_SPEED <= 255):
                 raise ValueError("Effect speed must be between 0 and 255")
             if not (0 <= cls.DEFAULT_EFFECT_INTENSITY <= 255):
@@ -482,7 +484,10 @@ class WLEDController:
             response = self._session.post(url, json=payload, timeout=Config.REQUEST_TIMEOUT)
 
             if response.status_code == 200:
-                logging.info(f"Applied effect {effect_index} (speed={Config.DEFAULT_EFFECT_SPEED}, intensity={Config.DEFAULT_EFFECT_INTENSITY}).")
+                logging.info(
+                    f"Applied effect {effect_index} "
+                    f"(speed={Config.DEFAULT_EFFECT_SPEED}, intensity={Config.DEFAULT_EFFECT_INTENSITY})."
+                )
                 self.system_health.record_success()
                 return True
             else:
@@ -599,7 +604,10 @@ class WLEDController:
                         self._last_state = state
                     self.system_health.record_success()
                     return True
-                logging.warning(f"Failed to set WLED state (Attempt {attempt+1}): HTTP {resp.status_code}")
+                logging.warning(
+                    f"Failed to set WLED state (Attempt {attempt+1}): "
+                    f"HTTP {resp.status_code}"
+                )
                 self.system_health.record_failure(f"HTTP {resp.status_code}")
             except requests.exceptions.RequestException as e:
                 logging.warning(f"Request error: {e}")
@@ -680,6 +688,49 @@ class WLEDController:
             self.system_health.record_failure(str(e))
             return self._effects_cache if self._effects_cache else []
 
+    def set_alert_effect(self, color, speed=128, second_color=(0,0,0)):
+        """
+        Sets WLED to use a blink effect (#1) with two colors.
+        By default, toggles between `color` and black,
+        but you can pass any second_color (e.g., white).
+
+        Args:
+            color (tuple): RGB color tuple (r,g,b) for the first color
+            speed (int): Effect speed (0-255)
+            second_color (tuple): RGB color tuple (r,g,b) for the second color
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            url = f"http://{self.ip_address}/json/state"
+            payload = {
+                "on": True,
+                "bri": Config.FLASH_BRIGHTNESS,
+                "transition": 0,  # Instant transition for alert effect
+                "seg": [{
+                    "id": 0,
+                    "col": [
+                        [color[0], color[1], color[2]],
+                        [second_color[0], second_color[1], second_color[2]]
+                    ],
+                    "fx": 1,  # Blink effect ID in WLED
+                    "sx": speed,  # Effect speed
+                    "ix": Config.DEFAULT_EFFECT_INTENSITY
+                }]
+            }
+            response = self._session.post(url, json=payload, timeout=Config.REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                self.system_health.record_success()
+                return True
+            else:
+                self.system_health.record_failure(f"HTTP {response.status_code}")
+                return False
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Failed to set alert effect: {e}")
+            self.system_health.record_failure(str(e))
+            return False
+
 
 # =================================
 # Helper: Revert to user-selected default
@@ -700,124 +751,97 @@ def revert_to_user_default(wled: 'WLEDController'):
 # ======================
 def blink_red_alert(wled: 'WLEDController'):
     """
-    Blink red for up to SHORT_FLASH_DURATION seconds, typically triggered by
-    a completed long press or partial/accidental long press.
-
-    Args:
-        wled (WLEDController): WLED controller instance to manipulate.
+    Use WLED's built-in blink effect for red alert, toggling between red and black.
     """
-    logging.info("Issuing red alert due to incomplete or normal long press.")
+    logging.info("Issuing red alert using WLED blink effect")
     start_time = time.time()
-    flash_state = True
     wled.flashing = True
 
     try:
+        # Convert FLASH_INTERVAL to an effect speed
+        speed = 200
+        speed = max(0, min(255, speed))
+
+        # Blink between red and black
+        if not wled.set_alert_effect((255, 0, 0), speed, (0,0,0)):
+            logging.error("Failed to set red alert effect")
+            wled.auto_recover()
+
         while (time.time() - start_time < Config.SHORT_FLASH_DURATION) and wled.flashing:
-            interval = Config.FLASH_INTERVAL / 2
-            if flash_state:
-                if not wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS):
-                    logging.error("Failed to set red color during alert")
-                    wled.auto_recover()
-            else:
-                if not wled.set_color(0, 0, 0, 0):
-                    logging.error("Failed to set off state during alert")
-                    wled.auto_recover()
-            flash_state = not flash_state
-            time.sleep(interval)
+            time.sleep(0.1)  # Short sleep to check for interruption
 
-        # Normal exit => revert
         revert_to_user_default(wled)
-
     except Exception as e:
-        logging.error(f"Error during red alert blinking: {e}")
-        # On exception => revert as well
+        logging.error(f"Error during red alert: {e}")
         revert_to_user_default(wled)
     finally:
-        # Always clear the flashing flag
         wled.flashing = False
 
 
 # ======================
-# Blink Green (Short Press) [Actually blue color in code]
+# Blink Green (Short Press) [Actually Blue]
 # ======================
 def blink_green_for_30s(wled: 'WLEDController'):
     """
-    Blink 'blue' for up to SHORT_FLASH_DURATION seconds, triggered by a short press.
-    If a new long press is detected during the blue blinking, override with red blinking
-    just like a normal long press.
-
-    Args:
-        wled (WLEDController): WLED controller instance to manipulate.
+    Use WLED's built-in blink effect for blue alert (short press),
+    toggling between blue and white.
+    Also handles potential long-press override during the sequence.
     """
     import RPi.GPIO as GPIO
 
-    logging.info("Short press => blink 'blue' for up to SHORT_FLASH_DURATION seconds")
+    logging.info("Short press => using WLED blink effect (blue vs. white)")
     wled.system_health.record_button_press()
 
     start_time = time.time()
-    flash_state = True
     wled.flashing = True
 
     press_start_time = None
-    long_press_active = False
     long_press_initiated = False
 
     try:
+        # Convert FLASH_INTERVAL to an effect speed
+        speed = 233
+        speed = max(0, min(255, speed))
+
+        # Blink between blue (0,0,255) and white (255,255,255)
+        if not wled.set_alert_effect((0, 0, 255), speed, (0,0,0)):
+            logging.error("Failed to set blue alert effect")
+            wled.auto_recover()
+
         while (time.time() - start_time < Config.SHORT_FLASH_DURATION) and wled.flashing:
-            # Check if the user is pressing the button again during the short-press (blue) sequence
+            # Check if the user is pressing the button again during the sequence
             if GPIO.input(Config.BUTTON_PIN) == 0:
                 if press_start_time is None:
                     press_start_time = time.time()
-                # If pressed long enough to qualify as a new long press, override the blue with red
-                elif (time.time() - press_start_time) >= Config.LONG_PRESS_THRESHOLD and not long_press_active:
-                    logging.info("Long press detected during blue => switching to red immediately")
-                    long_press_active = True
+                elif (time.time() - press_start_time) >= Config.LONG_PRESS_THRESHOLD:
+                    logging.info("Long press detected during blue => switching to red")
                     long_press_initiated = True
 
-                    # Blink red as long as the button remains pressed
-                    while GPIO.input(Config.BUTTON_PIN) == 0 and wled.flashing:
-                        interval = Config.FLASH_INTERVAL / 2
-                        if flash_state:
-                            if not wled.set_color(255, 0, 0, Config.FLASH_BRIGHTNESS):
-                                wled.auto_recover()
-                        else:
-                            if not wled.set_color(0, 0, 0, 0):
-                                wled.auto_recover()
-                        flash_state = not flash_state
-                        time.sleep(interval)
+                    # Switch to red blink effect with same speed
+                    if not wled.set_alert_effect((255, 0, 0), speed, (0,0,0)):
+                        wled.auto_recover()
 
-                    # Revert before returning
+                    # Keep red blinking while button is held
+                    while GPIO.input(Config.BUTTON_PIN) == 0 and wled.flashing:
+                        time.sleep(0.1)
+
                     revert_to_user_default(wled)
                     return
             else:
-                # If the button is not pressed, reset press_start_time
                 press_start_time = None
 
-            # Continue blinking blue
-            interval = Config.FLASH_INTERVAL / 2
-            if flash_state:
-                if not wled.set_color(0, 0, 255, Config.FLASH_BRIGHTNESS):  # Blue color
-                    wled.auto_recover()
-            else:
-                if not wled.set_color(0, 0, 0, 0):
-                    wled.auto_recover()
-            flash_state = not flash_state
-            time.sleep(interval)
+            time.sleep(0.1)
 
-        # If we exit the loop normally, revert
         revert_to_user_default(wled)
 
-        # If a new long press was initiated but not completed for some reason, do a red alert
         if long_press_initiated:
-            logging.info("Long press was initiated during blue flashing but not completed. Triggering red alert.")
+            logging.info("Long press was initiated but not completed. Triggering red alert.")
             blink_red_alert(wled)
 
     except Exception as e:
         logging.error(f"Error during blink sequence: {e}")
-        # On exception => revert
         revert_to_user_default(wled)
     finally:
-        # Always clear the flashing flag
         wled.flashing = False
 
 
@@ -882,10 +906,8 @@ def simulate_long_press(wled: 'WLEDController'):
 
     except Exception as e:
         logging.error(f"Error during long press simulation: {e}")
-        # On exception => revert
         revert_to_user_default(wled)
     finally:
-        # Always clear the flashing flag
         wled.flashing = False
 
 
@@ -1245,6 +1267,9 @@ def main():
 
 
 if __name__ == "__main__":
+    stop_event = threading.Event()
+    main()
+
     stop_event = threading.Event()
     main()
     
