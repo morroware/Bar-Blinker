@@ -4,203 +4,307 @@
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
 [![WLED Compatible](https://img.shields.io/badge/WLED-Compatible-brightgreen.svg)](https://github.com/Aircoookie/WLED)
 
-A Raspberry Pi-based controller for RGBW LED strips using WLED, featuring GPIO input triggering and web-based configuration. The system monitors contact closure events to control LED states and effects via the WLED API with full RGBW color support.
+Raspberry Pi WLED controller implementing GPIO input monitoring for RGBW LED control. Features thread-safe operation, exponential backoff reconnection, health monitoring, and web configuration.
 
-## Technical Specifications
+## System Architecture
 
-### RGBW Color Control
-- Full RGBW channel support (Red, Green, Blue, White)
-- Dedicated white channel utilization (0,0,0,255)
-- Color sequences:
-  - Short press: Blue/White toggle (0,0,255,0 ↔ 0,0,0,255)
-  - Long press: Red/Off toggle (255,0,0,0 ↔ 0,0,0,0)
-- Built-in WLED effect support
-- Configurable transition timings
+### Threading Implementation
+1. Main Thread (Flask Web Server)
+   - Handles HTTP requests on port 5000
+   - Implements rate limiting via IP tracking
+   - Manages configuration updates
+   - Provides health status endpoint
+   - Uses thread-safe session management
 
-### Input Processing
-- Contact closure detection via GPIO
-- Compatible input devices:
-  - Push buttons
-  - Relays
-  - Solid-state relays
-  - Open collector outputs
-  - Any contact closure mechanism
+2. Hardware Thread
+   - Monitors GPIO pin state (default: GPIO18)
+   - Implements software debounce
+   - Tracks press durations with microsecond precision
+   - Controls LED state transitions
+   - Manages auto-recovery on connection loss
+
+3. Connection Thread
+   - Maintains WLED device connection
+   - Implements exponential backoff (max 60s)
+   - Adds random jitter (±10% of delay)
+   - Caches effect lists for 300s
+   - Monitors connection health
+
+### State Machine
+1. Input States
+   ```
+   IDLE → SHORT_PRESS → SEQUENCE_ACTIVE → IDLE
+                     ↘ LONG_PRESS → ALERT_ACTIVE → IDLE
+   ```
+
+2. LED States
+   ```
+   DEFAULT_WHITE (0,0,0,255) →
+      SHORT_PRESS: BLUE (0,0,255,0) ↔ WHITE (0,0,0,255)
+      LONG_PRESS: RED (255,0,0,0) ↔ OFF (0,0,0,0)
+   ```
+
+3. Connection States
+   ```
+   INITIALIZING → HEALTHY ↔ DEGRADED → CRITICAL
+   ```
+
+### Resource Management
+1. Thread Synchronization
+   - State Lock: `_state_lock`
+   - Flash Lock: `_flash_lock`
+   - Health Lock: `_lock`
+   - Rate Limit Locks
+
+2. Memory Management
+   - Effect Caching
+   - Session Management
+   - Request Rate Tracking
+   - State History
+
+## Technical Implementation
+
+### GPIO Configuration
+```python
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+```
+- Active-low logic
+- Internal pull-up enabled
+- 10ms polling interval
 - Software debounce implementation
-- Configurable pull-up resistance
 
-### State Machine Logic
-- Short contact (<3s default):
-  - Triggers blue/white sequence
-  - Configurable timeout period
-  - Auto-restoration to default state
-  - Debounced input handling
+### WLED Communication
+1. Base URI: `http://{WLED_IP}/json/`
+2. Endpoints:
+   ```
+   /state  - POST JSON state updates
+   /info   - GET device information
+   /       - GET effect list
+   ```
+3. State JSON Structure:
+   ```json
+   {
+     "on": true,
+     "bri": 0-255,
+     "transition": milliseconds,
+     "seg": [{
+       "id": 0,
+       "col": [[r,g,b,w]],
+       "fx": effect_index,
+       "sx": speed,
+       "ix": intensity
+     }]
+   }
+   ```
 
-- Long contact (≥3s default):
-  - Activates red alert sequence
-  - Maintains state during closure
-  - Priority override capability
-  - Auto-restoration on release
+### Error Handling
+1. Connection Failures
+   ```python
+   for attempt in range(MAX_RETRIES):
+       delay = RETRY_DELAY * (2 ** attempt)
+       jitter = random.random() * (delay * 0.1)
+       time.sleep(delay + jitter)
+   ```
 
-### System Architecture
-- Multi-threaded operation:
-  1. Main Thread
-     - Web server (Flask)
-     - Configuration management
-     - Rate limiting
-     - Authentication handling
-  
-  2. Hardware Thread
-     - GPIO state monitoring
-     - Debounce processing
-     - LED state control
-     - Health monitoring
-  
-  3. Connection Thread
-     - WLED communication
-     - Auto-reconnection
-     - State caching
-     - Effect management
+2. State Recovery
+   ```python
+   if not self.is_connected:
+       self.wait_for_connection()
+       self.restore_last_state()
+   ```
 
 ### Health Monitoring
-- System status tracking
-- Connection state monitoring
-- Error logging and reporting
-- Automatic recovery mechanisms
-- Web-based health dashboard
+1. Metrics Tracked:
+   ```python
+   {
+     "status": ["healthy", "degraded", "critical"],
+     "last_successful_connection": ISO8601,
+     "failed_attempts": int,
+     "button_press_count": int,
+     "last_error": str
+   }
+   ```
 
-## Requirements
+2. Status Transitions:
+   - healthy → degraded: Single connection failure
+   - degraded → critical: MAX_FAILED_ATTEMPTS reached
+   - any → healthy: Successful connection
 
-### Hardware
-- Raspberry Pi (any model with GPIO)
-- Input device specifications:
-  - Voltage: 3.3V compatible
-  - Current: 8mA max per GPIO
-  - Contact resistance: < 100Ω
-- WLED-compatible controller
-  - ESP8266/ESP32 based
-  - RGBW strip support
-  - Network connectivity
-- RGBW LED strip
-  - Common anode/cathode
-  - Proper power supply
+## Configuration Parameters
 
-### Software Dependencies
-- Raspberry Pi OS (Buster or newer)
-- Python 3.6+
-- Required packages:
-```bash
-flask>=2.0.0
-requests>=2.25.1
-RPi.GPIO>=0.7.0
+### System Configuration
+```ini
+[BLINKER]
+BUTTON_PIN = 18                  # GPIO BCM mode pin
+WLED_IP = "192.168.1.15"        # IPv4 address
+LONG_PRESS_THRESHOLD = 3.0       # Seconds
+SHORT_FLASH_DURATION = 5.0       # Seconds
+FLASH_INTERVAL = 0.5            # Seconds
+FLASH_BRIGHTNESS = 255          # 0-255
+TRANSITION_TIME = 0.0           # Seconds
+REQUEST_TIMEOUT = 5.0           # Seconds
+```
+
+### Network Parameters
+```ini
+MAX_RETRIES = 3                 # Per request
+RETRY_DELAY = 1.0              # Base seconds
+RECONNECT_DELAY = 5.0          # Base seconds
+API_RATE_LIMIT = 100           # Requests per minute
+SESSION_TIMEOUT = 3600         # Seconds
+```
+
+### Effect Configuration
+```ini
+DEFAULT_MODE = "white"          # "white" or "effect"
+DEFAULT_EFFECT_INDEX = 162      # 0-200
+DEFAULT_EFFECT_SPEED = 128      # 0-255
+DEFAULT_EFFECT_INTENSITY = 128  # 0-255
+```
+
+### Authentication
+```ini
+WLED_USERNAME = null           # Optional HTTP Basic Auth
+WLED_PASSWORD = null           # Optional HTTP Basic Auth
+```
+
+## HTTP API
+
+### Rate-Limited Endpoints
+Rate limit: 100 requests per minute per IP
+```python
+@app.route("/")
+@rate_limit
+def index():
+    return render_template("index.html", ...)
+```
+
+### Configuration Updates
+```http
+POST /update_config
+Content-Type: application/x-www-form-urlencoded
+
+WLED_IP=192.168.1.15&LONG_PRESS_THRESHOLD=3.0...
+```
+
+### Input Simulation
+```http
+POST /simulate_press
+Content-Type: application/x-www-form-urlencoded
+
+press_type=short|long
+```
+
+### Health Check
+```http
+GET /health
+Response: application/json
+
+{
+  "status": "healthy",
+  "last_successful_connection": "2024-01-19T10:00:00Z",
+  "failed_attempts": 0,
+  "button_press_count": 42,
+  "last_error": null
+}
 ```
 
 ## Installation
 
-### System Preparation
+### Dependencies
 ```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3-pip git
+# System packages
+apt-get install -y python3-pip python3-venv
+
+# Python packages
+pip install flask>=2.0.0 requests>=2.25.1 RPi.GPIO>=0.7.0
 ```
 
-### Application Installation
-```bash
-git clone https://github.com/morroware/Bar-Blinker.git
-cd Bar-Blinker
-pip3 install -r requirements.txt
-```
-
-### Service Configuration
-```bash
-cp config/blinker-configs.ini.example blinker-configs.ini
-sudo cp systemd/bar-blinker.service /etc/systemd/system/
-sudo systemctl enable bar-blinker
-sudo systemctl start bar-blinker
-```
-
-## Configuration Parameters
-
-### Primary Configuration (blinker-configs.ini)
+### Systemd Service
 ```ini
-[BLINKER]
-BUTTON_PIN = 18                  # GPIO input pin
-WLED_IP = "192.168.1.15"        # WLED controller address
-LONG_PRESS_THRESHOLD = 3.0       # Sustained contact threshold (seconds)
-SHORT_FLASH_DURATION = 5.0       # Sequence duration
-FLASH_INTERVAL = 0.5            # State change interval
-FLASH_BRIGHTNESS = 255          # LED intensity (0-255)
-DEFAULT_MODE = "white"          # "white" or "effect"
-DEFAULT_EFFECT_INDEX = 162      # WLED effect number
-DEFAULT_EFFECT_SPEED = 128      # Effect speed (0-255)
-DEFAULT_EFFECT_INTENSITY = 128  # Effect intensity (0-255)
-WLED_USERNAME = null            # Optional auth
-WLED_PASSWORD = null            # Optional auth
+[Unit]
+Description=Bar-Blinker RGBW Controller
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /path/to/main.py
+WorkingDirectory=/path/to/
+User=pi
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-## Web Interface
-
-### Features
-- Real-time control panel
-- Configuration management
-- Health monitoring
-- Effect selection
-- Color control
-- Authentication support
-
-### Endpoints
-- / : Main interface
-- /update_config : Configuration updates
-- /simulate_press : Input simulation
-- /health : System status
-
-### Rate Limiting
-- Configurable requests per minute
-- Per-IP tracking
-- Automatic cleanup
-
-## System Management
-
-### Service Control
+### File Permissions
 ```bash
-sudo systemctl status bar-blinker    # Status check
-sudo systemctl restart bar-blinker   # Service restart
-journalctl -u bar-blinker -f         # Log monitoring
+chmod 644 /etc/systemd/system/bar-blinker.service
+chmod 755 /path/to/main.py
+chown -R pi:pi /path/to/
 ```
 
-### Health Monitoring
-- Status levels:
-  - healthy: System operational
-  - degraded: Minor issues detected
-  - critical: Major functionality impaired
-- Metrics tracked:
-  - Connection status
-  - Failed attempts
-  - Button press count
-  - Last error message
-  - Recovery attempts
+## Logging
 
-### Error Resolution
-1. Connection Issues
-   - Check WLED IP configuration
-   - Verify network connectivity
-   - Review authentication settings
-   - Check system logs
+### Configuration
+- Handler: RotatingFileHandler
+- Max Size: 1MB
+- Backup Count: 5
+- Format: `%(asctime)s - %(levelname)s - [%(threadName)s] - %(message)s`
+- Date Format: `%Y-%m-%d %H:%M:%S`
 
-2. Input Problems
-   - Verify GPIO connections
-   - Check input device functionality
-   - Review bounce settings
-   - Monitor hardware logs
+### Log Locations
+1. Application Log
+   ```
+   /home/tech/wled_button.log
+   ```
+2. Systemd Journal
+   ```bash
+   journalctl -u bar-blinker -f
+   ```
 
-3. LED Control Issues
-   - Verify WLED configuration
-   - Check power supply
-   - Review color settings
-   - Monitor state transitions
+## Error Codes and Recovery
+
+### HTTP Status Codes
+- 200: Success
+- 400: Invalid configuration
+- 429: Rate limit exceeded
+- 500: Internal server error
+
+### Recovery Methods
+1. Connection Loss
+   ```python
+   while not self.is_connected:
+       if self.initialize():
+           self.restore_last_state()
+           return True
+       time.sleep(backoff_delay)
+   ```
+
+2. State Corruption
+   ```python
+   def auto_recover(self):
+       if self.wait_for_connection():
+           return self.restore_last_state()
+       return False
+   ```
+
+### Critical Errors
+1. GPIO Access Failure
+   - Requires service restart
+   - Check permissions
+   - Verify hardware connections
+
+2. Configuration Corruption
+   - Reload from INI file
+   - Fall back to defaults
+   - Validate all parameters
+
+3. Network Failure
+   - Implement exponential backoff
+   - Cache last known state
+   - Return to default state
 
 ## License
-MIT License - See LICENSE file for details.
-
-## External Dependencies
-- WLED Firmware
-- Flask Framework
-- RPi.GPIO Library
+MIT License - See LICENSE file for details
